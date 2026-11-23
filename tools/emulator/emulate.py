@@ -37,16 +37,19 @@ PERIOD = dt.timedelta(minutes=15)
 CLASSES = ["car", "truck", "bus", "motorcycle", "bicycle", "person"]
 TZ = dt.timezone(dt.timedelta(hours=-5))  # America/Guayaquil (sin horario de verano)
 
-# Estaciones de prueba en Loja: tramos cortos de A a B (lon, lat). Ajustables.
+# Estaciones de prueba en Loja: tramos de ~160 m de A a B (lon, lat) recortados de la geometria de OpenStreetMap,
+# para que queden sobre la via. speed_limit: limite (maxspeed) de la via en OSM.
 SITES = [
-    {"name": "Av. Universitaria (emulada)", "a": (-79.20262, -3.99820), "b": (-79.20240, -3.99700), "peak": 520,
-     "label_a": "Sur", "label_b": "Norte"},
-    {"name": "Av. Marcelino Champagnat - UTPL (emulada)", "a": (-79.19930, -3.98700), "b": (-79.19820, -3.98620),
-     "peak": 380, "label_a": "Occidente", "label_b": "Oriente"},
-    {"name": "Av. Orillas del Zamora (emulada)", "a": (-79.20150, -3.99050), "b": (-79.20190, -3.98940), "peak": 640,
-     "label_a": "Sur", "label_b": "Norte"},
-    {"name": "Av. 8 de Diciembre (emulada)", "a": (-79.20520, -3.97500), "b": (-79.20470, -3.97390), "peak": 300,
-     "label_a": "Sur", "label_b": "Norte"},
+    {"name": "Av. Universitaria (emulada)", "peak": 520, "label_a": "Sur", "label_b": "Norte", "speed_limit": 50,
+     "path": [(-79.205350, -3.994076), (-79.205403, -3.993393), (-79.205502, -3.992668), (-79.205504, -3.992638)]},
+    {"name": "Av. Marcelino Champagnat - UTPL (emulada)", "peak": 380, "label_a": "Sur", "label_b": "Norte",
+     "speed_limit": 30,
+     "path": [(-79.200357, -3.989193), (-79.200255, -3.988977), (-79.200196, -3.988740), (-79.200166, -3.988594),
+              (-79.200127, -3.988318), (-79.200093, -3.988085), (-79.200039, -3.987927), (-79.199941, -3.987815),
+              (-79.199896, -3.987774)]},
+    {"name": "Av. Orillas del Zamora (emulada)", "peak": 640, "label_a": "Sur", "label_b": "Norte", "speed_limit": 50,
+     "path": [(-79.202943, -3.987932), (-79.202908, -3.987851), (-79.202657, -3.987265), (-79.202554, -3.986949),
+              (-79.202474, -3.986689), (-79.202437, -3.986551), (-79.202422, -3.986489)]},
 ]
 
 # Reparto por clase (vehiculos motorizados + bicicletas + personas)
@@ -156,11 +159,12 @@ def cmd_init(args):
     for i, s in enumerate(SITES[:n]):
         site_id, token = str(uuid.uuid4()), secrets.token_urlsafe(32)
         name = f"emulador-{i + 1}"
-        (ax, ay), (bx, by) = s["a"], s["b"]
+        wkt = ", ".join(f"{x} {y}" for x, y in s["path"])
         sql.append(
-            "insert into public.sites (id, name, description, segment, label_a, label_b) values "
+            "insert into public.sites (id, name, description, segment, label_a, label_b, speed_limit_kmh) values "
             f"('{site_id}', '{s['name']}', 'Estacion de prueba del emulador', "
-            f"extensions.st_geogfromtext('SRID=4326;LINESTRING({ax} {ay}, {bx} {by})'), '{s['label_a']}', '{s['label_b']}');")
+            f"extensions.st_geogfromtext('SRID=4326;LINESTRING({wkt})'), '{s['label_a']}', '{s['label_b']}', "
+            f"{s['speed_limit']});")
         sql.append(
             "insert into public.devices (site_id, name, token_hash) values "
             f"('{site_id}', '{name}', '{hashlib.sha256(token.encode()).hexdigest()}');")

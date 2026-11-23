@@ -20,3 +20,4 @@ create policy "publico lee conteos" on public.counts_15min for select to anon us
 --   revoke select on public.sites, public.device_live, public.counts_15min, public.site_overview from anon;
 --   revoke execute on function public.get_site_series(uuid, timestamptz, timestamptz, integer) from anon;
 --   revoke execute on function public.get_site_speeds(uuid, timestamptz, timestamptz) from anon;
+--   revoke execute on function public.get_site_speeds_by_hour(uuid, timestamptz, timestamptz) from anon;  (visor_velocidad_por_hora)

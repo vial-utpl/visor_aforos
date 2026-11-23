@@ -6,6 +6,9 @@
   <title>Visor de Aforos</title>
   <meta name="description" content="Aforos vehiculares en vivo de las estaciones FreeCount Traffic">
   <link rel="icon" href="img/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dygraphs@2.2.2/dist/dygraph.min.css">
   <link rel="stylesheet" href="css/app.css">
@@ -16,11 +19,11 @@
 <body>
   <header class="topbar">
     <a class="brand" href="#/">
-      <img src="img/icon.svg" alt="" width="28" height="28">
+      <img src="img/icon.svg" alt="" width="30" height="30">
       <span>Visor de Aforos</span>
     </a>
     <nav class="topnav" id="topnav" hidden>
-      <a href="#/">Mapa</a>
+      <a href="#/" id="nav-map">Mapa</a>
       <span class="user" id="user-email"></span>
       <button class="link" id="logout">Salir</button>
     </nav>
@@ -48,89 +51,155 @@
 
   <!-- Mapa de estaciones -->
   <main id="view-map" class="view map-view" hidden>
-    <aside class="sidebar">
-      <h2>Estaciones</h2>
-      <p class="muted small" id="map-updated"></p>
+    <div id="map"></div>
+
+    <aside class="map-panel" aria-label="Estaciones">
+      <div class="map-panel-head">
+        <h2>Estaciones</h2>
+        <span class="muted small" id="map-updated"></span>
+      </div>
       <ul class="site-list" id="site-list"></ul>
     </aside>
-    <div class="map-wrap">
-      <div id="map"></div>
-      <div class="legend card" id="map-legend"></div>
-    </div>
+
+    <div class="map-legend" id="map-legend"></div>
+    <div class="map-counter" id="map-counter"></div>
+
+    <aside class="drawer" id="drawer" hidden aria-live="polite">
+      <button class="icon-btn drawer-close" id="drawer-close" aria-label="Cerrar"></button>
+      <div id="drawer-body"></div>
+    </aside>
   </main>
 
   <!-- Estación -->
   <main id="view-site" class="view site-view" hidden>
-    <section class="site-head">
-      <div>
-        <a href="#/" class="back">← Mapa</a>
+    <section class="hero">
+      <div class="hero-inner">
+        <a href="#/" class="back">← Volver al mapa</a>
         <h1 id="site-name"></h1>
-        <p class="muted" id="site-desc"></p>
-      </div>
-      <div class="live card" id="live-box"></div>
-    </section>
-
-    <section class="controls card">
-      <div class="group">
-        <span class="label">Periodo</span>
-        <button data-range="1">Hoy</button>
-        <button data-range="7" class="on">7 días</button>
-        <button data-range="31">31 días</button>
-        <input type="date" id="from"> → <input type="date" id="to">
-      </div>
-      <div class="group">
-        <span class="label">Sentido</span>
-        <button data-dir="both" class="on">Ambos</button>
-        <button data-dir="ab" id="dir-ab">A → B</button>
-        <button data-dir="ba" id="dir-ba">B → A</button>
-      </div>
-      <div class="group">
-        <span class="label">Agrupar</span>
-        <button data-bucket="15">15 min</button>
-        <button data-bucket="60" class="on">1 hora</button>
-        <button data-bucket="1440">1 día</button>
+        <p class="hero-sub" id="site-desc"></p>
+        <div class="chips" id="site-chips"></div>
       </div>
     </section>
 
-    <section class="totals" id="totals"></section>
+    <div class="page">
+      <section class="intro-grid">
+        <div class="card minimap-card"><div id="minimap"></div></div>
+        <div class="card live" id="live-box"></div>
+      </section>
 
-    <section class="card chart-card">
-      <div class="chart-head">
-        <h2>Serie temporal</h2>
-        <div class="series-toggles" id="series-toggles"></div>
-        <div class="chart-tools">
-          <button id="reset-zoom">Restablecer zoom</button>
-          <button id="export-png">Descargar PNG</button>
+      <section class="toolbar card" id="toolbar">
+        <div class="group">
+          <span class="label">Periodo</span>
+          <div class="seg">
+            <button data-range="1">Hoy</button>
+            <button data-range="7" class="on">7 días</button>
+            <button data-range="14">14 días</button>
+            <button data-range="31">31 días</button>
+          </div>
+          <div class="dates">
+            <input type="date" id="from" aria-label="Desde"><span>→</span><input type="date" id="to" aria-label="Hasta">
+          </div>
         </div>
+        <div class="group">
+          <span class="label">Sentido</span>
+          <div class="seg">
+            <button data-dir="both" class="on">Ambos</button>
+            <button data-dir="ab" id="dir-ab">A → B</button>
+            <button data-dir="ba" id="dir-ba">B → A</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="kpis" id="totals"></section>
+
+      <section class="card block">
+        <div class="block-head">
+          <h2>Resumen diario</h2>
+          <p class="muted small">Total por día y clase. Pase el cursor sobre una barra para ver el detalle.</p>
+        </div>
+        <div class="legend-row" id="daily-legend"></div>
+        <div id="chart-daily" class="svgwrap"></div>
+      </section>
+
+      <section class="card block">
+        <div class="block-head center-head">
+          <h2>Serie temporal</h2>
+          <div class="seg seg-sm">
+            <span class="label">Intervalo</span>
+            <button data-bucket="15">15 min</button>
+            <button data-bucket="60" class="on">1 hora</button>
+            <button data-bucket="1440">1 día</button>
+          </div>
+        </div>
+        <div class="ts-wrap">
+          <div id="chart-series" class="chart"></div>
+          <div id="chart-series-legend" class="ts-legend"></div>
+        </div>
+        <div class="ts-foot">
+          <div class="ts-toggles" id="series-toggles"></div>
+          <div class="ts-tools">
+            <button id="reset-zoom" class="ghost"></button>
+            <button id="export-png" class="ghost"></button>
+          </div>
+        </div>
+        <ul class="howto">
+          <li>Arrastre sobre la gráfica para acercar; doble clic o «Restablecer» para ver todo el rango.</li>
+          <li>El selector de abajo también ajusta el rango visible.</li>
+          <li>La caja abajo a la izquierda promedia N intervalos (media móvil); 1 = sin promediar.</li>
+          <li>Franjas grises: el equipo no midió el intervalo completo (apagado o sin conexión).</li>
+        </ul>
+      </section>
+
+      <div class="grid2">
+        <section class="card block">
+          <div class="block-head">
+            <h2>Perfil horario promedio</h2>
+            <div class="seg seg-sm">
+              <button data-daytype="wd" class="on">Laborables</button>
+              <button data-daytype="we">Fin de semana</button>
+            </div>
+          </div>
+          <div id="chart-day" class="chart small-chart"></div>
+          <div id="chart-day-legend" class="chart-legend"></div>
+        </section>
+        <section class="card block">
+          <div class="block-head">
+            <h2>Promedio por sentido</h2>
+            <p class="muted small">Vehículos motorizados por hora, promedio de los días medidos.</p>
+          </div>
+          <div id="chart-dir" class="chart small-chart"></div>
+          <div id="chart-dir-legend" class="chart-legend"></div>
+        </section>
       </div>
-      <div id="chart-series" class="chart"></div>
-      <div id="chart-series-legend" class="chart-legend"></div>
-      <p class="muted small">Zonas grises: el equipo no midió el periodo completo (apagado o sin datos). Arrastre para hacer zoom; el número de abajo a la izquierda promedia periodos.</p>
-    </section>
 
-    <div class="grid2">
-      <section class="card chart-card">
-        <h2>Día promedio</h2>
-        <div id="chart-day" class="chart small-chart"></div>
-        <div id="chart-day-legend" class="chart-legend"></div>
-      </section>
-      <section class="card chart-card">
-        <h2>Por sentido</h2>
-        <div id="chart-dir" class="chart small-chart"></div>
-        <div id="chart-dir-legend" class="chart-legend"></div>
-      </section>
-    </div>
+      <div class="grid2">
+        <section class="card block">
+          <div class="block-head">
+            <h2>Distribución de velocidades</h2>
+            <p class="muted small">Vehículos motorizados por rango de 10 km/h.</p>
+          </div>
+          <div id="chart-speed" class="svgwrap"></div>
+          <p class="note" id="speed-note"></p>
+        </section>
+        <section class="card block">
+          <div class="block-head">
+            <h2>V85 por hora del día</h2>
+            <p class="muted small">Velocidad por debajo de la cual circula el 85 % de los vehículos.</p>
+          </div>
+          <div id="chart-v85" class="svgwrap"></div>
+          <p class="note" id="v85-note"></p>
+        </section>
+      </div>
 
-    <div class="grid2">
-      <section class="card chart-card">
-        <h2>Velocidad de vehículos motorizados</h2>
-        <div id="speed-bars" class="bars"></div>
-        <p class="muted small" id="speed-note"></p>
+      <section class="card block split-block">
+        <div>
+          <div class="block-head"><h2>Reparto modal</h2></div>
+          <div id="chart-donut" class="donut-wrap"></div>
+        </div>
+        <ul class="split-list" id="split-list"></ul>
       </section>
-      <section class="card chart-card">
-        <h2>Reparto modal</h2>
-        <div id="modal-split" class="split"></div>
-      </section>
+
+      <p class="footnote">Datos de conteo automático por visión artificial (FreeCount Traffic). Velocidades indicativas.</p>
     </div>
   </main>
 
