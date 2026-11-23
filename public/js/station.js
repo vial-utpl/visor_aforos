@@ -531,7 +531,7 @@ export async function showSite(id) {
   renderLive()
   await reload()
 
-  // en vivo: el estado cambia cada ~30 s; cuando cierra un periodo, se recargan las gráficas
+  // en vivo: el estado cambia cada ~2 min; cuando cierra un periodo, se recargan las gráficas
   st.unsubscribe?.()
   st.unsubscribe = onLive(id, (row) => {
     const closed = st.live?.period_start && row?.period_start !== st.live.period_start

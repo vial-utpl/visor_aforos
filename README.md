@@ -14,17 +14,29 @@ Jetson (FreeCount) ──POST /functions/v1/ingest──▶ Supabase (Postgres +
 | Carpeta | Qué es |
 |---|---|
 | `public/` | El visor: HTML + JavaScript sin compilación (Leaflet 1.9.4, Dygraphs 2.2.2, supabase-js 2.119.2). Vercel lo publica tal cual. |
-| `supabase/migrations/` | Esquema: `sites`, `devices`, `device_live`, `counts_15min`, vistas y funciones del visor, RLS, Realtime; retención (archivo horario después de 13 meses). |
+| `supabase/migrations/` | Esquema: `sites`, `devices`, `device_live`, `counts_15min`, vistas y funciones del visor, RLS, Realtime; retención (archivo horario después de 13 meses). `supabase/tests/`: pruebas que terminan en rollback. |
 | `supabase/functions/ingest/` | Edge Function que reciben los equipos. |
 | `tools/emulator/` | Emulador de equipos para trabajar sin el Jetson. |
 
 ## Base de datos
 - **`sites`**: estación, tramo `LINESTRING` de A a B (PostGIS), nombres de los extremos, zona horaria.
 - **`devices`**: cada equipo, su estación y el **hash** (sha256) de su token. Los usuarios no la ven.
-- **`device_live`**: una fila por equipo, sobrescrita cada ~30 s (estado, fps, conteos del periodo en curso). No crece.
+- **`device_live`**: una fila por equipo, sobrescrita cada ~2 min (estado, fps, conteos del periodo en curso). No crece.
 - **`counts_15min`**: una fila por equipo, periodo y sentido: `minutes_measured` (0–15) y conteos de `car`, `truck`,
   `bus`, `motorcycle`, `bicycle`, `person`, más `speed_bins` (12 rangos de 10 km/h, vehículos motorizados).
-  Con 15 equipos: ~2.900 filas/día, ~150–200 MB/año; después de 13 meses se resume por hora.
+  Con 15 equipos: ~2.900 filas/día, ~230 MB/año (medido: ~220–270 bytes por fila).
+- **`counts_hourly_archive`** (migración `aforos_retencion`): una tarea diaria de `pg_cron` resume por hora los
+  periodos de más de 13 meses y los borra de `counts_15min`; las consultas del visor leen ambas tablas. Así la base
+  cabe en los 500 MB del plan gratuito (~250 MB de 15 min + ~60 MB/año de archivo con 15 equipos). Probarla antes con
+  `supabase/tests/prueba_retencion.sql` (no cambia nada).
+
+## Plan gratuito de Supabase
+- **Invocaciones de Edge Functions: 500.000/mes.** Cada equipo hace una petición cada **2 min** (estado en vivo +
+  periodos en cola): 15 equipos ≈ 324.000/mes. Con envíos cada 30 s solo alcanzaría para ~5 equipos.
+- **Base de datos: 500 MB** (ver retención arriba). **Realtime: 2 millones de mensajes/mes** (solo las páginas de
+  estación abiertas reciben cambios).
+- **Pausa tras 1 semana sin actividad**: mientras algún equipo envíe datos el proyecto sigue activo; sin equipos,
+  abrir el visor o el panel de Supabase al menos una vez por semana.
 - Acceso: **RLS** en todas las tablas; escribe solo la Edge Function. **Por ahora el visor es público** (solo
   lectura, sin login: `REQUIRE_LOGIN = false` en `public/js/config.js` y migración `acceso_publico`). Para volver a
   exigir sesión: `REQUIRE_LOGIN = true` y aplicar el bloque "Revertir" de esa migración.

@@ -8,4 +8,4 @@ export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_hHcoYwq52BsNpvEhwYiZjw_D
 export const REQUIRE_LOGIN = false
 
 // Un equipo se considera desconectado si no envía su estado en este tiempo.
-export const OFFLINE_AFTER_MS = 3 * 60 * 1000
+export const OFFLINE_AFTER_MS = 5 * 60 * 1000

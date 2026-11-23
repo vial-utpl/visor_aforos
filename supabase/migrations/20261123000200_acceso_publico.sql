@@ -21,3 +21,5 @@ create policy "publico lee conteos" on public.counts_15min for select to anon us
 --   revoke execute on function public.get_site_series(uuid, timestamptz, timestamptz, integer) from anon;
 --   revoke execute on function public.get_site_speeds(uuid, timestamptz, timestamptz) from anon;
 --   revoke execute on function public.get_site_speeds_by_hour(uuid, timestamptz, timestamptz) from anon;  (visor_velocidad_por_hora)
+--   drop policy "publico lee archivo horario" on public.counts_hourly_archive;                (aforos_retencion)
+--   revoke select on public.counts_hourly_archive from anon;                                  (aforos_retencion)

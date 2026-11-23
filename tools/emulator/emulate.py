@@ -2,13 +2,13 @@
 """Emulador de equipos FreeCount Traffic (Jetson) para trabajar en la base de datos y el visor sin el equipo real.
 
 Envia exactamente lo mismo que enviara la app: totales cada 15 minutos por sentido (A->B / B->A) y clase, rangos de
-velocidad, y el estado en vivo cada 30 s, a la Edge Function `ingest`. Solo usa la biblioteca estandar de Python 3.8+.
+velocidad, y el estado en vivo cada 2 min (como la app), a la Edge Function `ingest`. Solo usa la biblioteca estandar de Python 3.8+.
 
   python emulate.py init [--devices 3]          crea estaciones y equipos de prueba: devices.local.json (tokens,
                                                  no subir a git) y seed_devices.local.sql (para ejecutar en Supabase)
   python emulate.py backfill --days 14          sube el historico de los ultimos N dias
   python emulate.py live [--offline-every 20 --offline-minutes 5]
-                                                 cuenta "en vivo": estado cada 30 s y cada periodo al cerrarse;
+                                                 cuenta "en vivo": estado cada 2 min (--interval) y los periodos cerrados;
                                                  simula cortes de red (guarda en cola y sube al reconectar)
 
 La URL del proyecto va en --url o en la variable FCT_SUPABASE_URL (https://<ref>.supabase.co).
@@ -265,7 +265,7 @@ def main():
     b = sub.add_parser("backfill")
     b.add_argument("--days", type=int, default=14)
     l = sub.add_parser("live")
-    l.add_argument("--interval", type=int, default=30, help="segundos entre envios")
+    l.add_argument("--interval", type=int, default=120, help="segundos entre envios (la app: 120)")
     l.add_argument("--offline-every", type=float, default=0, help="minutos entre cortes simulados (0 = sin cortes)")
     l.add_argument("--offline-minutes", type=float, default=5)
     args = p.parse_args()
