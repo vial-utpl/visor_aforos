@@ -1,11 +1,12 @@
-// Arranque: sesión (solo usuarios invitados) y rutas por hash: #/ mapa, #/estacion/<id>.
+// Arranque: sesión (solo usuarios invitados) y rutas por hash: #/ mapa, #/estacion/<id>, #/admin (requiere sesión).
 import { db } from './data.js'
 import { REQUIRE_LOGIN } from './config.js'
 import { showMap, leaveMap } from './map.js'
 import { showSite, leaveSite } from './station.js'
+import { showAdmin, leaveAdmin } from './admin.js'
 
 const $ = (id) => document.getElementById(id)
-const views = ['view-login', 'view-map', 'view-site']
+const views = ['view-login', 'view-map', 'view-site', 'view-admin']
 
 // Un enlace de invitación o de recuperación trae la sesión en la URL: después hay que fijar la contraseña.
 const mustSetPassword = /type=(invite|recovery)/.test(location.hash + location.search)
@@ -27,15 +28,26 @@ async function route() {
   const session = data.session
   $('topnav').hidden = REQUIRE_LOGIN && !session
   $('user-email').hidden = $('logout').hidden = !session
-  if (REQUIRE_LOGIN && (!session || mustSetPassword)) {
+  const admin = location.hash.match(/^#\/admin\/?(.*)$/)
+  if ((REQUIRE_LOGIN || admin || mustSetPassword) && (!session || mustSetPassword)) {
     leaveMap()
     leaveSite()
+    leaveAdmin()
+    $('login-note').textContent = admin ? 'Administración: inicie sesión con su cuenta de administrador.' : 'Acceso para usuarios invitados.'
     show('view-login')
     $('login-form').hidden = !!session
     $('password-form').hidden = !session
     return
   }
   $('user-email').textContent = session?.user.email ?? ''
+  if (admin) {
+    leaveMap()
+    leaveSite()
+    show('view-admin')
+    await showAdmin(admin[1], session)
+    return
+  }
+  leaveAdmin()
   const m = location.hash.match(/^#\/estacion\/([0-9a-f-]{36})/)
   if (m) {
     leaveMap()
@@ -69,7 +81,7 @@ $('password-form').addEventListener('submit', async (e) => {
   const password = new FormData(e.target).get('password')
   const { error } = await db.auth.updateUser({ password })
   if (error) return ($('password-msg').textContent = error.message)
-  history.replaceState(null, '', location.pathname + '#/')
+  history.replaceState(null, '', location.pathname + '#/admin')
   location.reload()
 })
 

@@ -24,6 +24,7 @@
     </a>
     <nav class="topnav" id="topnav" hidden>
       <a href="#/" id="nav-map">Mapa</a>
+      <a href="#/admin" id="nav-admin">Administrar</a>
       <span class="user" id="user-email"></span>
       <button class="link" id="logout">Salir</button>
     </nav>
@@ -33,7 +34,7 @@
   <main id="view-login" class="view center" hidden>
     <form class="card login" id="login-form">
       <h1>Iniciar sesión</h1>
-      <p class="muted">Acceso para usuarios invitados.</p>
+      <p class="muted" id="login-note">Acceso para usuarios invitados.</p>
       <label>Correo <input type="email" name="email" autocomplete="username" required></label>
       <label>Contraseña <input type="password" name="password" autocomplete="current-password" required></label>
       <button type="submit" class="primary">Entrar</button>
@@ -202,6 +203,11 @@
 
       <p class="footnote">Datos de conteo automático por visión artificial (FreeCount Traffic). Velocidades indicativas.</p>
     </div>
+  </main>
+
+  <!-- Administración: estaciones y asistente de alta -->
+  <main id="view-admin" class="view admin-view" hidden>
+    <div class="page admin-page" id="admin-body"></div>
   </main>
 
   <div class="toast" id="toast" role="alert" hidden></div>

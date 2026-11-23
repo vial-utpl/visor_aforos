@@ -8,3 +8,7 @@ verify_jwt = false
 [auth]
 # Users are invited by the administrator; nobody can sign up on their own.
 enable_signup = false
+
+[functions.pair]
+# A device redeems the pairing code made by the viewer's setup wizard; the code is its only credential.
+verify_jwt = false

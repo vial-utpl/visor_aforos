@@ -76,7 +76,23 @@ Content-Type: application/json
    (sin compilación; `vercel.json` publica `public/`). Para probar localmente: `python -m http.server -d public 8080`
    y en Supabase → Authentication → URL Configuration añadir `http://localhost:8080` y la URL de Vercel.
 
-## Alta de un equipo real
+## Alta de estaciones desde el visor (administración)
+Como el asistente de Telraam: **Administrar → Nueva estación** recorre *Equipo* (V1 Raspberry Pi, S2 Jetson, V3
+próximamente) → *Dirección* → *Ubicación* (clic sobre la vía: A, puntos intermedios, B) → *Preparación* →
+*Vincular* → *Listo*. Al vincular se guarda la estación y se genera un **código de un solo uso** (`XXXX-XXXX`, 24 h).
+En la app del Jetson: panel **Visor de aforos** → **Código de vinculación** → **Vincular**; la Edge Function `pair`
+canjea el código, crea el equipo (o le renueva el token) y devuelve el token, que solo se guarda en el equipo.
+La pantalla *Listo* espera sola a que el equipo se vincule y envíe.
+
+- Requiere la migración `alta_estaciones` y la función `pair` (`verify_jwt = false`).
+- El mapa sigue público; `#/admin` pide sesión y solo deja pasar a usuarios de la tabla `admins`:
+  1. Supabase → Authentication → URL Configuration: *Site URL* `https://visoraforos.vercel.app` (y en Redirect URLs
+     también `http://localhost:8080`).
+  2. Authentication → Users → *Invite user* con el correo del administrador; el enlace lleva a fijar la contraseña.
+  3. `insert into public.admins (user_id) select id from auth.users where email = '<correo>';`
+- La dirección y el tipo de equipo quedan en `site_setup`, que solo leen los administradores.
+
+## Alta de un equipo real (sin el visor)
 **Con el script** (recomendado): genera el token y deja el SQL y los ajustes del Jetson en `tools/altas/` (no se
 suben a git). Los puntos van como `"lat,lon"`, el primero es A y el último B:
 ```bash
