@@ -76,7 +76,7 @@ input { font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--line); bo
 #map { position: absolute; inset: 0; background: #eceef0; }
 .tiles-gray { filter: grayscale(1) contrast(0.88) brightness(1.06); }
 .leaflet-container { font-family: var(--font); }
-path.leaflet-interactive:focus { outline: none; }
+path.leaflet-interactive:focus:not(:focus-visible) { outline: none; }
 .leaflet-control-zoom { margin-left: 336px !important; }
 
 .map-panel {
