@@ -77,6 +77,15 @@ Content-Type: application/json
    y en Supabase → Authentication → URL Configuration añadir `http://localhost:8080` y la URL de Vercel.
 
 ## Alta de un equipo real
+**Con el script** (recomendado): genera el token y deja el SQL y los ajustes del Jetson en `tools/altas/` (no se
+suben a git). Los puntos van como `"lat,lon"`, el primero es A y el último B:
+```bash
+python tools/alta_equipo.py --nombre "Av. ..." --equipo jetson-01 --punto "-4.0123,-79.2011" --punto "-4.0110,-79.2005"     --a Sur --b Norte --limite 50 --descripcion "..."
+```
+Ejecutar `tools/altas/jetson-01.local.sql` en el SQL Editor y copiar `jetson-01.cloud.local.json` al Jetson como
+`~/.config/FreeCountTraffic/cloud.json` (o pegar la dirección y el token en el panel **Visor de aforos** de la app).
+
+**A mano:**
 1. Crear la estación (tramo de A a B):
    ```sql
    insert into public.sites (name, description, segment, label_a, label_b)
