@@ -1,5 +1,6 @@
 // Arranque: sesión (solo usuarios invitados) y rutas por hash: #/ mapa, #/estacion/<id>.
 import { db } from './data.js'
+import { REQUIRE_LOGIN } from './config.js'
 import { showMap, leaveMap } from './map.js'
 import { showSite, leaveSite } from './station.js'
 
@@ -24,8 +25,9 @@ function show(view) {
 async function route() {
   const { data } = await db.auth.getSession()
   const session = data.session
-  $('topnav').hidden = !session
-  if (!session || mustSetPassword) {
+  $('topnav').hidden = REQUIRE_LOGIN && !session
+  $('user-email').hidden = $('logout').hidden = !session
+  if (REQUIRE_LOGIN && (!session || mustSetPassword)) {
     leaveMap()
     leaveSite()
     show('view-login')
@@ -33,7 +35,7 @@ async function route() {
     $('password-form').hidden = !session
     return
   }
-  $('user-email').textContent = session.user.email ?? ''
+  $('user-email').textContent = session?.user.email ?? ''
   const m = location.hash.match(/^#\/estacion\/([0-9a-f-]{36})/)
   if (m) {
     leaveMap()

@@ -25,7 +25,9 @@ Jetson (FreeCount) ──POST /functions/v1/ingest──▶ Supabase (Postgres +
 - **`counts_15min`**: una fila por equipo, periodo y sentido: `minutes_measured` (0–15) y conteos de `car`, `truck`,
   `bus`, `motorcycle`, `bicycle`, `person`, más `speed_bins` (12 rangos de 10 km/h, vehículos motorizados).
   Con 15 equipos: ~2.900 filas/día, ~150–200 MB/año; después de 13 meses se resume por hora.
-- Acceso: **RLS** en todas las tablas; los usuarios con sesión solo leen; escribe solo la Edge Function.
+- Acceso: **RLS** en todas las tablas; escribe solo la Edge Function. **Por ahora el visor es público** (solo
+  lectura, sin login: `REQUIRE_LOGIN = false` en `public/js/config.js` y migración `acceso_publico`). Para volver a
+  exigir sesión: `REQUIRE_LOGIN = true` y aplicar el bloque "Revertir" de esa migración.
   El registro público está desactivado: los usuarios se **invitan** desde Supabase (Authentication → Users → Invite).
 
 ## Lo que envía un equipo

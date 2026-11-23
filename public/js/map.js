@@ -75,9 +75,10 @@ async function refresh() {
 export async function showMap() {
   if (!map) {
     map = L.map('map', { zoomControl: true }).setView([-3.99, -79.2], 14)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 20,
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
+    // Teselas estándar de OpenStreetMap (sin clave; uso moderado según su política de teselas).
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map)
     layer = L.layerGroup().addTo(map)
     legend()
