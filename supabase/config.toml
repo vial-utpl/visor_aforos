@@ -1,0 +1,10 @@
+# Supabase project of the counts viewer (project ref agfcwepbdkcojykvnqpj).
+project_id = "visor_aforos"
+
+[functions.ingest]
+# The devices authenticate with their own token (x-device-token), not with a Supabase key or a user session.
+verify_jwt = false
+
+[auth]
+# Users are invited by the administrator; nobody can sign up on their own.
+enable_signup = false

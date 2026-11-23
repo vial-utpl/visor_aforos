@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visor de Aforos</title>
+  <meta name="description" content="Aforos vehiculares en vivo de las estaciones FreeCount Traffic">
+  <link rel="icon" href="img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dygraphs@2.2.2/dist/dygraph.min.css">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dygraphs@2.2.2/dist/dygraph.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/">
+      <img src="img/icon.svg" alt="" width="28" height="28">
+      <span>Visor de Aforos</span>
+    </a>
+    <nav class="topnav" id="topnav" hidden>
+      <a href="#/">Mapa</a>
+      <span class="user" id="user-email"></span>
+      <button class="link" id="logout">Salir</button>
+    </nav>
+  </header>
+
+  <!-- Inicio de sesión -->
+  <main id="view-login" class="view center" hidden>
+    <form class="card login" id="login-form">
+      <h1>Iniciar sesión</h1>
+      <p class="muted">Acceso para usuarios invitados.</p>
+      <label>Correo <input type="email" name="email" autocomplete="username" required></label>
+      <label>Contraseña <input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="primary">Entrar</button>
+      <button type="button" class="link" id="forgot">¿Olvidó su contraseña?</button>
+      <p class="msg" id="login-msg" role="status"></p>
+    </form>
+    <form class="card login" id="password-form" hidden>
+      <h1>Nueva contraseña</h1>
+      <p class="muted">Elija la contraseña con la que entrará al visor.</p>
+      <label>Contraseña <input type="password" name="password" minlength="8" autocomplete="new-password" required></label>
+      <button type="submit" class="primary">Guardar</button>
+      <p class="msg" id="password-msg" role="status"></p>
+    </form>
+  </main>
+
+  <!-- Mapa de estaciones -->
+  <main id="view-map" class="view map-view" hidden>
+    <aside class="sidebar">
+      <h2>Estaciones</h2>
+      <p class="muted small" id="map-updated"></p>
+      <ul class="site-list" id="site-list"></ul>
+    </aside>
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="legend card" id="map-legend"></div>
+    </div>
+  </main>
+
+  <!-- Estación -->
+  <main id="view-site" class="view site-view" hidden>
+    <section class="site-head">
+      <div>
+        <a href="#/" class="back">← Mapa</a>
+        <h1 id="site-name"></h1>
+        <p class="muted" id="site-desc"></p>
+      </div>
+      <div class="live card" id="live-box"></div>
+    </section>
+
+    <section class="controls card">
+      <div class="group">
+        <span class="label">Periodo</span>
+        <button data-range="1">Hoy</button>
+        <button data-range="7" class="on">7 días</button>
+        <button data-range="31">31 días</button>
+        <input type="date" id="from"> → <input type="date" id="to">
+      </div>
+      <div class="group">
+        <span class="label">Sentido</span>
+        <button data-dir="both" class="on">Ambos</button>
+        <button data-dir="ab" id="dir-ab">A → B</button>
+        <button data-dir="ba" id="dir-ba">B → A</button>
+      </div>
+      <div class="group">
+        <span class="label">Agrupar</span>
+        <button data-bucket="15">15 min</button>
+        <button data-bucket="60" class="on">1 hora</button>
+        <button data-bucket="1440">1 día</button>
+      </div>
+    </section>
+
+    <section class="totals" id="totals"></section>
+
+    <section class="card chart-card">
+      <div class="chart-head">
+        <h2>Serie temporal</h2>
+        <div class="series-toggles" id="series-toggles"></div>
+        <div class="chart-tools">
+          <button id="reset-zoom">Restablecer zoom</button>
+          <button id="export-png">Descargar PNG</button>
+        </div>
+      </div>
+      <div id="chart-series" class="chart"></div>
+      <div id="chart-series-legend" class="chart-legend"></div>
+      <p class="muted small">Zonas grises: el equipo no midió el periodo completo (apagado o sin datos). Arrastre para hacer zoom; el número de abajo a la izquierda promedia periodos.</p>
+    </section>
+
+    <div class="grid2">
+      <section class="card chart-card">
+        <h2>Día promedio</h2>
+        <div id="chart-day" class="chart small-chart"></div>
+        <div id="chart-day-legend" class="chart-legend"></div>
+      </section>
+      <section class="card chart-card">
+        <h2>Por sentido</h2>
+        <div id="chart-dir" class="chart small-chart"></div>
+        <div id="chart-dir-legend" class="chart-legend"></div>
+      </section>
+    </div>
+
+    <div class="grid2">
+      <section class="card chart-card">
+        <h2>Velocidad de vehículos motorizados</h2>
+        <div id="speed-bars" class="bars"></div>
+        <p class="muted small" id="speed-note"></p>
+      </section>
+      <section class="card chart-card">
+        <h2>Reparto modal</h2>
+        <div id="modal-split" class="split"></div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="alert" hidden></div>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# secretos y datos locales del emulador (tokens de equipos, cola sin enviar)
+*.local.json
+*.local.sql
+*.local.md
+.env
+.env.*
+!.env.example
+
+# herramientas
+.vercel/
+supabase/.temp/
+supabase/.branches/
+node_modules/
+__pycache__/
+.playwright-mcp/
+.DS_Store
