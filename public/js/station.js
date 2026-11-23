@@ -199,26 +199,94 @@ function seriesToggles() {
   }
 }
 
-function renderSeries() {
+const COLOR_OF = Object.fromEntries(CLASSES.map((c) => [c.label, c.color]))
+
+/**
+ * Barras apiladas para Dygraphs. Dygraphs apila las series (stackedGraph) y calcula la escala del eje Y según el
+ * tramo visible; aquí solo se dibuja cada intervalo como una barra que ocupa su duración, en vez de áreas.
+ * En una gráfica apilada de Dygraphs la última serie visible queda abajo: la base de la serie j es la cima de la j+1.
+ */
+function stackedBarPlotter(e) {
+  if (e.seriesIndex !== 0) return // se dibujan todas las series de una vez
+  const g = e.dygraph
+  const ctx = e.drawingContext
+  const sets = e.allSeriesPoints
+  const ms = st.bucket * 60_000
+  const y0 = g.toDomYCoord(0)
+  const tops = sets.map((pts) => new Map(pts.map((p) => [p.xval, p.canvasy])))
+  const [xMin, xMax] = g.xAxisRange()
+  for (let j = 0; j < sets.length; j++) {
+    for (const p of sets[j]) {
+      ctx.fillStyle = COLOR_OF[p.name] ?? '#999'
+      if (p.xval + ms < xMin || p.xval > xMax || !Number.isFinite(p.canvasy)) continue
+      const below = j + 1 < sets.length ? tops[j + 1].get(p.xval) : y0
+      const base = Number.isFinite(below) ? below : y0
+      const x1 = g.toDomXCoord(p.xval)
+      const w = g.toDomXCoord(p.xval + ms) - x1
+      const gap = w > 4 ? Math.min(3, w * 0.18) : 0
+      const h = base - p.canvasy
+      if (h > 0) ctx.fillRect(x1 + gap / 2, p.canvasy, Math.max(1, w - gap), h)
+    }
+  }
+}
+
+/**
+ * Columna resaltada bajo el cursor (en vez de círculos en cada serie). Dygraphs llama a esta función una vez por
+ * serie con la misma x: se dibuja solo la primera vez de cada selección.
+ */
+function highlightColumn(g, seriesName, ctx, cx) {
+  if (ctx.__columnDrawn) return
+  ctx.__columnDrawn = true
+  queueMicrotask(() => (ctx.__columnDrawn = false))
+  const t = g.toDataXCoord(cx)
+  const w = g.toDomXCoord(t + st.bucket * 60_000) - cx
+  const area = g.getArea()
+  ctx.save()
+  // Dygraphs solo borra una franja estrecha alrededor de la selección anterior: se limpia toda la capa
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+  ctx.restore()
+  ctx.save()
+  ctx.fillStyle = 'rgba(17, 24, 39, 0.16)'
+  ctx.fillRect(cx, area.y, Math.max(2, w), area.h)
+  ctx.restore()
+}
+
+/** Ventana inicial: con muchos intervalos, la gráfica abre en el tramo final y el selector de abajo recorre el resto. */
+function initialWindow(buckets) {
+  if (!buckets.length) return null
+  const ms = st.bucket * 60_000
+  const end = buckets[buckets.length - 1].t + ms
+  const span = { 15: 2 * DAY, 60: 7 * DAY }[st.bucket]
+  const start = buckets[0].t
+  return span && end - start > span ? [end - span, end] : [start, end]
+}
+
+function renderSeries({ keepWindow = false } = {}) {
   const buckets = buildBuckets()
   const data = buckets.map((b) => [new Date(b.t), ...CLASSES.map((c) => (b.values ? b.values[c.key] : null))])
-  if (!data.length) data.push([new Date(st.from), ...CLASSES.map(() => null)])
   const ms = st.bucket * 60_000
-  const gaps = buckets.filter((b) => b.coverage < 0.999)
+  // fila vacía al final: la última barra (que ocupa [t, t + intervalo]) entra completa al restablecer el zoom
+  data.push([new Date((buckets.at(-1)?.t ?? st.from.getTime()) + ms), ...CLASSES.map(() => null)])
+  // franjas grises: intervalos sin medir completos (en días, solo si falta más del 5 %)
+  const gaps = buckets.filter((b) => b.coverage < (st.bucket === 1440 ? 0.95 : 0.999))
   const unit = st.bucket === 1440 ? 'día' : st.bucket === 60 ? 'hora' : '15 min'
+  const prev = keepWindow ? st.graphs.series?.xAxisRange() : null
+  // el extremo derecho incluye el último intervalo completo (las barras ocupan [t, t + intervalo])
+  const win = prev ?? initialWindow(buckets)
   const opts = {
     labels: ['Fecha', ...CLASSES.map((c) => c.label)],
     colors: CLASSES.map((c) => c.color),
     visibility: st.visible,
     stackedGraph: true,
     stackedGraphNaNFill: 'none',
-    fillGraph: true,
-    fillAlpha: 0.88,
-    strokeWidth: 0.6,
-    stepPlot: false,
+    plotter: stackedBarPlotter,
+    drawHighlightPointCallback: highlightColumn,
+    includeZero: true,
+    dateWindow: win,
     connectSeparatedPoints: false,
     showRangeSelector: true,
-    rangeSelectorHeight: 44,
+    rangeSelectorHeight: 56,
     rangeSelectorPlotFillColor: '#a3adbd',
     rangeSelectorPlotFillGradientColor: '#e5e8ed',
     rangeSelectorPlotStrokeColor: '#6b7280',
@@ -232,10 +300,21 @@ function renderSeries() {
     ylabel: `Usuarios / ${unit}`,
     axisLineColor: '#cbd2d9',
     gridLineColor: '#eef0f3',
-    highlightCircleSize: 3,
+    highlightCircleSize: 4,
     highlightSeriesOpts: null,
+    xRangePad: 0,
     axes: {
-      x: { axisLabelFontSize: 12, drawGrid: false },
+      x: {
+        axisLabelFontSize: 12,
+        drawGrid: true,
+        valueFormatter: (t) => {
+          const d = new Date(t)
+          const day = d.toLocaleDateString('es-EC', { weekday: 'short', day: 'numeric', month: 'short' })
+          if (st.bucket === 1440) return day
+          const hm = (x) => x.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', hour12: false })
+          return `${day}, ${hm(d)}–${hm(new Date(t + ms))}`
+        },
+      },
       y: { axisLabelFontSize: 12, axisLabelWidth: 46 },
     },
     underlayCallback: (ctx, area, g) => {
@@ -389,11 +468,11 @@ function renderSplit(sums) {
 
 // ---------------------------------------------------------------------------------------------------------------
 
-function renderByDirection() {
+function renderByDirection(keepWindow = false) {
   const sums = totals()
   renderKpis(sums)
   renderDaily()
-  renderSeries()
+  renderSeries({ keepWindow })
   renderProfile()
   renderSplit(sums)
 }
@@ -469,7 +548,7 @@ function bindControls() {
     b.addEventListener('click', () => {
       pick('[data-dir]', b)
       st.dir = b.dataset.dir
-      renderByDirection()
+      renderByDirection(true)
     }),
   )
   document.querySelectorAll('[data-bucket]').forEach((b) =>
