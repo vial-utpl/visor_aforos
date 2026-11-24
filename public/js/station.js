@@ -262,51 +262,42 @@ function bucketTitle(t) {
 }
 
 /**
- * Detalle flotante junto a la barra bajo el cursor: valor de cada clase visible, total y minutos medidos. Va a la
- * derecha de la barra (a la izquierda si no cabe) y a la altura de su cima.
+ * Detalle del intervalo bajo el cursor, con el mismo aspecto que el de «Resumen diario»: título y total, y cada clase
+ * visible de arriba abajo como en la barra. Solo cambia el contenido al cambiar de barra; la posición sigue al cursor.
  */
 function showSeriesTip(g, points, row) {
   const tip = $('series-tip')
   const b = st.buckets?.[row]
   if (!g || !b) return void (tip.hidden = true)
-  const ms = st.bucket * 60_000
   const roll = g.rollPeriod()
   const num = (v) => Number(v).toLocaleString('es-EC', { maximumFractionDigits: roll > 1 ? 1 : 0 })
   const vals = points.filter((p) => Number.isFinite(p.yval))
   const total = vals.reduce((s, p) => s + p.yval, 0)
-  let html = `<h4>${esc(bucketTitle(b.t))}</h4>`
   if (!b.values || !vals.length) {
-    html += '<div class="tnote">Sin datos en este intervalo</div>'
+    tip.innerHTML = `<b>${esc(bucketTitle(b.t))}</b><br>Sin datos`
   } else {
-    html += vals
-      .map((p) => `<div class="r"><i style="background:${COLOR_OF[p.name] ?? '#999'}"></i><span>${esc(p.name)}</span><b>${num(p.yval)}</b></div>`)
-      .join('')
-    html += `<div class="r tot"><i></i><span>Total</span><b>${num(total)}</b></div>`
+    const rows = vals.map((p) => `<span class="sw" style="background:${COLOR_OF[p.name] ?? '#999'}"></span>${esc(p.name)} <b>${num(p.yval)}</b>`)
     if (b.coverage < 0.999) {
       const done = st.bucket === 1440
         ? `${(b.coverage * 24).toLocaleString('es-EC', { maximumFractionDigits: 1 })} de 24 h`
         : `${Math.round(b.coverage * st.bucket)} de ${st.bucket} min`
-      html += `<div class="tnote">Medido ${done}</div>`
+      rows.push(`<span class="tnote">Medido ${done}</span>`)
     }
-    if (roll > 1) html += `<div class="tnote">Media de ${roll} intervalos</div>`
+    if (roll > 1) rows.push(`<span class="tnote">Media de ${roll} intervalos</span>`)
+    tip.innerHTML = `<b>${esc(bucketTitle(b.t))}</b> · ${num(total)}<br>${rows.join('<br>')}`
   }
-  tip.innerHTML = html
   tip.hidden = false
-  const area = g.getArea()
-  const chart = $('chart-series')
-  const x1 = g.toDomXCoord(b.t)
-  const x2 = g.toDomXCoord(b.t + ms)
-  const tw = tip.offsetWidth
-  const th = tip.offsetHeight
-  let left = x2 + 10
-  const flip = left + tw > area.x + area.w
-  if (flip) left = Math.max(0, x1 - tw - 10)
-  const yTop = total > 0 ? g.toDomYCoord(total) : area.y + area.h / 2
-  const top = Math.max(area.y, Math.min(yTop - 18, area.y + area.h - th))
-  tip.classList.toggle('flip', flip)
-  tip.style.left = `${chart.offsetLeft + left}px`
-  tip.style.top = `${chart.offsetTop + top}px`
-  tip.style.setProperty('--ay', `${Math.max(10, Math.min(th - 10, yTop - top))}px`)
+}
+
+/** Coloca el detalle junto al cursor (como el tooltip de las gráficas SVG). */
+function moveSeriesTip(e) {
+  const tip = $('series-tip')
+  if (tip.hidden) return
+  const r = tip.getBoundingClientRect()
+  let x = e.clientX + 14
+  if (x + r.width > innerWidth - 8) x = e.clientX - r.width - 14
+  tip.style.left = `${x}px`
+  tip.style.top = `${Math.max(8, e.clientY - r.height - 10)}px`
 }
 
 /** Ventana inicial: con muchos intervalos, la gráfica abre en el tramo final y el selector de abajo recorre el resto. */
@@ -354,7 +345,10 @@ function renderSeries({ keepWindow = false } = {}) {
     showRoller: true,
     rollPeriod: 1,
     legend: 'never',
-    highlightCallback: (e, x, points, row) => showSeriesTip(st.graphs.series, points, row),
+    highlightCallback: (e, x, points, row) => {
+      showSeriesTip(st.graphs.series, points, row)
+      moveSeriesTip(e)
+    },
     unhighlightCallback: () => ($('series-tip').hidden = true),
     ylabel: `Usuarios / ${unit}`,
     axisLineColor: '#cbd2d9',
@@ -589,6 +583,8 @@ const fail = (e) => toast(`No se pudieron cargar los datos: ${e.message ?? e}`)
 function bindControls() {
   if (bindControls.done) return
   bindControls.done = true
+  $('chart-series').addEventListener('mousemove', moveSeriesTip)
+  $('chart-series').addEventListener('mouseleave', () => ($('series-tip').hidden = true))
   const pick = (sel, el) => document.querySelectorAll(sel).forEach((b) => b.classList.toggle('on', b === el))
   document.querySelectorAll('[data-range]').forEach((b) =>
     b.addEventListener('click', () => {

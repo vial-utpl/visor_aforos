@@ -223,22 +223,7 @@ path.leaflet-interactive:focus:not(:focus-visible) { outline: none; }
 .ts-wrap { position: relative; }
 .chart { width: 100%; height: 400px; }
 .small-chart { height: 270px; }
-.ts-tip {
-  position: absolute; z-index: 5; pointer-events: none; min-width: 180px; background: #1f2329; color: #f3f4f6; border-radius: 8px;
-  padding: 0.55rem 0.75rem 0.6rem; font-size: 0.84rem; line-height: 1.55; box-shadow: var(--shadow-lg);
-}
-.ts-tip::before {
-  content: ''; position: absolute; left: -7px; top: calc(var(--ay, 18px) - 7px);
-  border-top: 7px solid transparent; border-bottom: 7px solid transparent; border-right: 7px solid #1f2329;
-}
-.ts-tip.flip::before { left: auto; right: -7px; border-right: 0; border-left: 7px solid #1f2329; }
-.ts-tip h4 { margin: 0 0 0.3rem; font-size: 0.9rem; font-weight: 600; }
-.ts-tip .r { display: grid; grid-template-columns: 13px 1fr auto; gap: 0.5rem; align-items: center; }
-.ts-tip .r i { width: 13px; height: 13px; border-radius: 2px; border: 1px solid rgba(255, 255, 255, 0.35); }
-.ts-tip .r b { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
-.ts-tip .tot { margin-top: 0.25rem; padding-top: 0.25rem; border-top: 1px solid rgba(255, 255, 255, 0.15); }
-.ts-tip .tot i { border: 0; }
-.ts-tip .tnote { color: #9ca3af; font-size: 0.76rem; }
+.tip .tnote { color: #9ca3af; font-size: 0.74rem; }
 .chart-legend b { color: var(--text); font-weight: 600; }
 .chart-legend { min-height: 1.4em; font-size: 0.82rem; color: var(--muted); }
 .ts-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.8rem; }

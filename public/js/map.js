@@ -28,6 +28,11 @@ const shapes = new Map() // id → { line, point, center }
 const stack = [] // ids de los paneles abiertos, del más antiguo al más nuevo
 let active = null // id del panel abierto al frente
 const weeks = new Map() // id → { at, rows }: últimos 7 días, para no volver a pedirlos al cambiar de pestaña
+const hours = new Map() // id → { at, d }: última hora, para la burbuja al pasar el cursor
+const HOUR_CACHE_MS = 60_000
+let pop = null // la burbuja abierta (de la estación bajo el cursor o de la elegida)
+let pinned = null // { id, latlng }: estación elegida con clic, su burbuja queda abierta
+let hideTimer
 
 const $ = (id) => document.getElementById(id)
 const siteById = (id) => sites.find((x) => x.id === id)
@@ -106,6 +111,54 @@ function popupHtml(s, d) {
     <a href="#/estacion/${s.id}">Ver datos →</a></div></div>`
 }
 
+function hourOf(id) {
+  const c = hours.get(id)
+  if (c && Date.now() - c.at < HOUR_CACHE_MS) return Promise.resolve(c.d)
+  return lastHour(id).then((d) => (hours.set(id, { at: Date.now(), d }), d))
+}
+
+/** Abre la burbuja "última hora" de una estación. Al pasar el cursor no mueve el mapa; al hacer clic sí, si no cabe. */
+function showPopup(id, latlng, pan) {
+  const s = siteById(id)
+  if (!s) return
+  clearTimeout(hideTimer)
+  const panOpts = !pan
+    ? { autoPan: false }
+    : innerWidth < 700
+      ? { autoPanPadding: [12, 70] }
+      : { autoPanPaddingTopLeft: [340, 20], autoPanPaddingBottomRight: [($('drawer').offsetWidth || 400) + 20, 20] }
+  const p = L.popup({ offset: [0, -6], ...panOpts }).setLatLng(latlng).setContent(popupHtml(s, hours.get(id)?.d ?? null)).openOn(map)
+  p.siteId = id
+  pop = p
+  const el = p.getElement()
+  el.addEventListener('mouseenter', () => clearTimeout(hideTimer))
+  el.addEventListener('mouseleave', scheduleHide)
+  el.querySelector('.leaflet-popup-close-button')?.addEventListener('click', () => {
+    if (pinned?.id === id) pinned = null
+  })
+  hourOf(id).then((d) => pop === p && p.isOpen() && p.setContent(popupHtml(s, d))).catch(() => {})
+}
+
+/** Cursor sobre un tramo o punto: su burbuja (si no es la que ya está abierta). */
+function hover(id) {
+  clearTimeout(hideTimer)
+  if (pop?.isOpen() && pop.siteId === id) return
+  const sh = shapes.get(id)
+  if (sh) showPopup(id, sh.center, false)
+}
+
+/** Al salir el cursor, la burbuja se cierra en un momento (o vuelve la de la estación elegida). */
+function scheduleHide() {
+  clearTimeout(hideTimer)
+  hideTimer = setTimeout(() => {
+    if (pinned && siteById(pinned.id)) {
+      if (!(pop?.isOpen() && pop.siteId === pinned.id)) showPopup(pinned.id, pinned.latlng, false)
+    } else {
+      map.closePopup()
+    }
+  }, 300)
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Paneles de la derecha: el activo completo y los demás como pestañas verticales
 
@@ -167,6 +220,7 @@ function closeSite(id) {
   if (i >= 0) stack.splice(i, 1)
   if (active === id) {
     active = stack.at(-1) ?? null
+    pinned = null
     map?.closePopup()
   }
   highlight()
@@ -191,13 +245,12 @@ function select(id, latlng) {
   }
   active = id
   highlight()
+  renderDrawer()
   const sh = shapes.get(id)
   if (sh) {
-    const pop = L.popup({ offset: [0, -6], ...(innerWidth < 700 ? { autoPanPadding: [12, 70] } : { autoPanPaddingTopLeft: [340, 20], autoPanPaddingBottomRight: [($('drawer').offsetWidth || 400) + 20, 20] }) })
-      .setLatLng(latlng ?? sh.center).setContent(popupHtml(s, null)).openOn(map)
-    lastHour(id).then((d) => active === id && pop.isOpen() && pop.setContent(popupHtml(s, d))).catch(() => {})
+    pinned = { id, latlng: latlng ?? sh.center }
+    showPopup(id, pinned.latlng, true)
   }
-  renderDrawer()
 }
 
 /** Tramos con el mapa cerca; puntos con el mapa lejos. */
@@ -228,16 +281,14 @@ async function refresh() {
     const off = st.dot === 'off'
     const color = off ? OFF : colorFor(s.vehicles_last_hour)
     const coords = (s.segment?.coordinates ?? []).map(([lon, lat]) => [lat, lon])
-    const tipText = `${esc(s.name)} · ${fmt(s.vehicles_last_hour)} veh/h`
     if (coords.length >= 2) {
       L.polyline(coords, { color: '#fff', weight: 13, opacity: 0.95, lineCap: 'round', interactive: false }).addTo(segLayer)
       const line = L.polyline(coords, {
         color, weight: 7, opacity: 1, lineCap: 'round', dashArray: off ? '2 10' : null, bubblingMouseEvents: false,
       }).addTo(segLayer)
       line.on('click', (e) => select(s.id, e.latlng))
-      line.on('mouseover', () => line.setStyle({ weight: 10 }))
-      line.on('mouseout', highlight)
-      line.bindTooltip(tipText, { sticky: true, direction: 'top', offset: [0, -8] })
+      line.on('mouseover', () => (line.setStyle({ weight: 10 }), hover(s.id)))
+      line.on('mouseout', () => (highlight(), scheduleHide()))
       L.marker(coords[0], { icon: endIcon('A'), interactive: false }).addTo(segLayer)
       L.marker(coords[coords.length - 1], { icon: endIcon('B'), interactive: false }).addTo(segLayer)
 
@@ -246,9 +297,8 @@ async function refresh() {
         radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1, bubblingMouseEvents: false,
       }).addTo(pointLayer)
       point.on('click', () => select(s.id))
-      point.on('mouseover', () => point.setStyle({ radius: 11 }))
-      point.on('mouseout', highlight)
-      point.bindTooltip(tipText, { direction: 'top', offset: [0, -10] })
+      point.on('mouseover', () => (point.setStyle({ radius: 11 }), hover(s.id)))
+      point.on('mouseout', () => (highlight(), scheduleHide()))
       shapes.set(s.id, { line, point, center })
       bounds.push(...coords)
     }
@@ -303,7 +353,10 @@ export async function showMap() {
       if (e.key !== 'Escape' || !active || $('view-map').hidden || e.target.closest?.('input, textarea')) return
       closeSite(active)
     })
-    map.on('click', () => map.closePopup())
+    map.on('click', () => {
+      pinned = null
+      map.closePopup()
+    })
     map.on('zoomend', applyZoom)
   }
   setTimeout(() => map.invalidateSize(), 0)
