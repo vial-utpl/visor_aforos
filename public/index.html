@@ -65,9 +65,12 @@
     <div class="map-legend" id="map-legend"></div>
     <div class="map-counter" id="map-counter"></div>
 
-    <aside class="drawer" id="drawer" hidden aria-live="polite">
-      <button class="icon-btn drawer-close" id="drawer-close" aria-label="Cerrar"></button>
-      <div id="drawer-body"></div>
+    <aside class="drawer" id="drawer" hidden aria-label="Estaciones abiertas">
+      <div class="drawer-tabs" id="drawer-tabs"></div>
+      <div class="drawer-panel" aria-live="polite">
+        <button class="icon-btn drawer-close" id="drawer-close" aria-label="Cerrar"></button>
+        <div id="drawer-body"></div>
+      </div>
     </aside>
   </main>
 
@@ -134,7 +137,7 @@
         </div>
         <div class="ts-wrap">
           <div id="chart-series" class="chart"></div>
-          <div id="chart-series-legend" class="ts-legend"></div>
+          <div id="series-tip" class="ts-tip" role="status" hidden></div>
         </div>
         <div class="ts-foot">
           <div class="ts-toggles" id="series-toggles"></div>
@@ -146,6 +149,7 @@
         <ul class="howto">
           <li>Con intervalos de 15 min la gráfica abre en las últimas 48 h, y con 1 hora en los últimos 7 días.
             Arrastre la ventana del selector de abajo para recorrer el periodo, o sus asas para ensancharla.</li>
+          <li>Pase el cursor sobre una barra para ver el detalle del intervalo.</li>
           <li>Arrastre sobre la gráfica para acercar; doble clic o «Restablecer» para ver todo el periodo.</li>
           <li>La caja abajo a la izquierda promedia N intervalos (media móvil); 1 = sin promediar.</li>
           <li>Franjas grises: el equipo no midió el intervalo completo (apagado o sin conexión).</li>

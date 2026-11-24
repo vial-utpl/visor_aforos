@@ -1,5 +1,6 @@
-// Mapa de estaciones (Leaflet): cada tramo A→B coloreado por vehículos motorizados en la última hora.
-// Al elegir un tramo: ventana con la última hora (por clase y V85) y panel lateral con los últimos 7 días.
+// Mapa de estaciones (Leaflet): cada tramo A→B coloreado por vehículos motorizados en la última hora. Con el mapa
+// alejado, cada estación es un punto. Al elegir una: ventana con la última hora (por clase y V85) y panel a la derecha
+// con los últimos 7 días; al elegir otra, la anterior queda como pestaña vertical a la izquierda del panel.
 import { CLASSES, siteOverview, lastHour, series, liveState, ago, fmt, esc, dateTime } from './data.js'
 import { icon } from './icons.js'
 import { stackedBars } from './charts.js'
@@ -16,20 +17,27 @@ const SCALE = [
 const OFF = '#9ca3af'
 const REFRESH_MS = 60_000
 const DAY = 86_400_000
+const POINT_ZOOM = 15 // por debajo de este zoom las estaciones se dibujan como puntos
+const MAX_STACK = 5 // paneles abiertos a la vez (el más antiguo se cierra)
+const WEEK_CACHE_MS = 5 * 60_000
 
-let map, layer, timer
+let map, segLayer, pointLayer, timer
 let fitted = false
 let sites = []
-let selected = null
-const lines = new Map()
+const shapes = new Map() // id → { line, point, center }
+const stack = [] // ids de los paneles abiertos, del más antiguo al más nuevo
+let active = null // id del panel abierto al frente
+const weeks = new Map() // id → { at, rows }: últimos 7 días, para no volver a pedirlos al cambiar de pestaña
 
 const $ = (id) => document.getElementById(id)
+const siteById = (id) => sites.find((x) => x.id === id)
 
-/** Márgenes para encuadrar: el panel de estaciones (izquierda o abajo) y el panel lateral (derecha). */
+/** Márgenes para encuadrar: el panel de estaciones (izquierda o abajo) y los paneles de la derecha. */
 function pads(drawer) {
   const mobile = innerWidth < 700
   if (mobile) return { paddingTopLeft: [24, 90], paddingBottomRight: [24, Math.round(innerHeight * 0.4)] }
-  return { paddingTopLeft: [340, 50], paddingBottomRight: [drawer ? 420 : 40, 50] }
+  const right = drawer ? Math.max(420, ($('drawer').hidden ? 0 : $('drawer').offsetWidth) + 20) : 40
+  return { paddingTopLeft: [340, 50], paddingBottomRight: [right, 50] }
 }
 
 function colorFor(vph) {
@@ -52,6 +60,27 @@ function stateOf(s) {
   if (st === 'ok') return { dot: 'ok', text: 'Contando ahora' }
   if (st === 'warn') return { dot: 'warn', text: s.live_status === 'reconnecting' ? 'Reconectando la cámara' : 'Conteo detenido' }
   return { dot: 'off', text: `Sin conexión · ${ago(s.live_updated_at)}` }
+}
+
+/** Punto a mitad del recorrido del tramo (no el centro de su recuadro, que en una curva cae fuera de la vía). */
+function midpoint(coords) {
+  const k = Math.cos((coords[0][0] * Math.PI) / 180)
+  const len = []
+  let total = 0
+  for (let i = 1; i < coords.length; i++) {
+    const d = Math.hypot(coords[i][0] - coords[i - 1][0], (coords[i][1] - coords[i - 1][1]) * k)
+    len.push(d)
+    total += d
+  }
+  let half = total / 2
+  for (let i = 1; i < coords.length; i++) {
+    if (half <= len[i - 1] || i === coords.length - 1) {
+      const f = len[i - 1] ? Math.min(1, half / len[i - 1]) : 0
+      return [coords[i - 1][0] + (coords[i][0] - coords[i - 1][0]) * f, coords[i - 1][1] + (coords[i][1] - coords[i - 1][1]) * f]
+    }
+    half -= len[i - 1]
+  }
+  return coords[0]
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -78,11 +107,25 @@ function popupHtml(s, d) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Panel lateral
+// Paneles de la derecha: el activo completo y los demás como pestañas verticales
 
-async function openDrawer(s) {
+function renderDrawer() {
+  const open = stack.filter((id) => id !== active && siteById(id))
+  $('drawer-tabs').innerHTML = open
+    .map((id) => {
+      const name = esc(siteById(id).name)
+      return `<div class="dtab">
+        <button class="icon-btn dtab-x" data-close="${id}" aria-label="Cerrar ${name}" title="Cerrar">${icon('close', 16)}</button>
+        <button class="dtab-name" data-open="${id}" title="${name}"><span>${name}</span></button></div>`
+    })
+    .join('')
+  const s = siteById(active)
+  $('drawer').hidden = !s
+  if (s) fillPanel(s).catch(() => {})
+}
+
+async function fillPanel(s) {
   const st = stateOf(s)
-  $('drawer').hidden = false
   $('drawer-body').innerHTML = `<h2>${esc(s.name)}</h2>
     <p class="kicker">${esc(s.label_a)} ⇄ ${esc(s.label_b)}${s.speed_limit_kmh ? ` · ${s.speed_limit_kmh} km/h` : ''}</p>
     <div class="state"><span class="dot ${st.dot}"></span>${st.text}</div>
@@ -97,11 +140,15 @@ async function openDrawer(s) {
     <a class="btn-more" href="#/estacion/${s.id}">${icon('chart', 18)}Más datos</a>`
   const to = new Date(new Date().setHours(0, 0, 0, 0) + DAY)
   const from = new Date(to.getTime() - 7 * DAY)
-  const rows = await series(s.id, from, to, 1440)
-  if (selected !== s.id) return
+  let week = weeks.get(s.id)
+  if (!week || Date.now() - week.at > WEEK_CACHE_MS) {
+    week = { at: Date.now(), rows: await series(s.id, from, to, 1440) }
+    weeks.set(s.id, week)
+  }
+  if (active !== s.id) return
   const days = Array.from({ length: 7 }, (_, i) => new Date(from.getTime() + i * DAY))
   const byDay = new Map()
-  for (const r of rows) {
+  for (const r of week.rows) {
     const k = new Date(r.bucket_start).toDateString()
     const e = byDay.get(k) ?? {}
     for (const c of CLASSES) e[c.key] = (e[c.key] ?? 0) + Number(r[c.key])
@@ -114,39 +161,63 @@ async function openDrawer(s) {
   })
 }
 
-function closeDrawer() {
-  $('drawer').hidden = true
-  selected = null
-  map?.closePopup()
+/** Cierra un panel; si era el del frente, pasa al frente el último abierto. */
+function closeSite(id) {
+  const i = stack.indexOf(id)
+  if (i >= 0) stack.splice(i, 1)
+  if (active === id) {
+    active = stack.at(-1) ?? null
+    map?.closePopup()
+  }
   highlight()
+  renderDrawer()
 }
 
 function highlight() {
-  for (const [id, l] of lines) l.line.setStyle({ weight: id === selected ? 10 : 7 })
-  document.querySelectorAll('.site-list a').forEach((a) => a.classList.toggle('sel', a.dataset.id === selected))
+  const open = new Set(stack)
+  for (const [id, sh] of shapes) {
+    sh.line.setStyle({ weight: id === active ? 10 : open.has(id) ? 9 : 7 })
+    sh.point.setStyle({ radius: id === active ? 11 : open.has(id) ? 9 : 7, weight: id === active ? 3 : 2 })
+  }
+  document.querySelectorAll('.site-list a').forEach((a) => a.classList.toggle('sel', a.dataset.id === active))
 }
 
-async function select(id, latlng) {
-  const s = sites.find((x) => x.id === id)
-  const l = lines.get(id)
+function select(id, latlng) {
+  const s = siteById(id)
   if (!s) return
-  selected = id
-  highlight()
-  if (l) {
-    const at = latlng ?? l.line.getCenter()
-    const pop = L.popup({ offset: [0, -6], ...(innerWidth < 700 ? { autoPanPadding: [12, 70] } : { autoPanPaddingTopLeft: [340, 20], autoPanPaddingBottomRight: [420, 20] }) })
-      .setLatLng(at).setContent(popupHtml(s, null)).openOn(map)
-    lastHour(id).then((d) => selected === id && pop.isOpen() && pop.setContent(popupHtml(s, d))).catch(() => {})
+  if (!stack.includes(id)) {
+    stack.push(id)
+    if (stack.length > MAX_STACK) stack.shift()
   }
-  openDrawer(s).catch(() => {})
+  active = id
+  highlight()
+  const sh = shapes.get(id)
+  if (sh) {
+    const pop = L.popup({ offset: [0, -6], ...(innerWidth < 700 ? { autoPanPadding: [12, 70] } : { autoPanPaddingTopLeft: [340, 20], autoPanPaddingBottomRight: [($('drawer').offsetWidth || 400) + 20, 20] }) })
+      .setLatLng(latlng ?? sh.center).setContent(popupHtml(s, null)).openOn(map)
+    lastHour(id).then((d) => active === id && pop.isOpen() && pop.setContent(popupHtml(s, d))).catch(() => {})
+  }
+  renderDrawer()
+}
+
+/** Tramos con el mapa cerca; puntos con el mapa lejos. */
+function applyZoom() {
+  if (map.getZoom() < POINT_ZOOM) {
+    map.removeLayer(segLayer)
+    pointLayer.addTo(map)
+  } else {
+    map.removeLayer(pointLayer)
+    segLayer.addTo(map)
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
 
 async function refresh() {
   sites = await siteOverview()
-  layer.clearLayers()
-  lines.clear()
+  segLayer.clearLayers()
+  pointLayer.clearLayers()
+  shapes.clear()
   const bounds = []
   let live = 0
   const list = $('site-list')
@@ -157,19 +228,28 @@ async function refresh() {
     const off = st.dot === 'off'
     const color = off ? OFF : colorFor(s.vehicles_last_hour)
     const coords = (s.segment?.coordinates ?? []).map(([lon, lat]) => [lat, lon])
+    const tipText = `${esc(s.name)} · ${fmt(s.vehicles_last_hour)} veh/h`
     if (coords.length >= 2) {
-      const casing = L.polyline(coords, { color: '#fff', weight: 13, opacity: 0.95, lineCap: 'round', interactive: false }).addTo(layer)
+      L.polyline(coords, { color: '#fff', weight: 13, opacity: 0.95, lineCap: 'round', interactive: false }).addTo(segLayer)
       const line = L.polyline(coords, {
-        color, weight: s.id === selected ? 10 : 7, opacity: 1, lineCap: 'round', dashArray: off ? '2 10' : null,
-        bubblingMouseEvents: false,
-      }).addTo(layer)
+        color, weight: 7, opacity: 1, lineCap: 'round', dashArray: off ? '2 10' : null, bubblingMouseEvents: false,
+      }).addTo(segLayer)
       line.on('click', (e) => select(s.id, e.latlng))
       line.on('mouseover', () => line.setStyle({ weight: 10 }))
-      line.on('mouseout', () => s.id !== selected && line.setStyle({ weight: 7 }))
-      line.bindTooltip(`${esc(s.name)} · ${fmt(s.vehicles_last_hour)} veh/h`, { sticky: true, direction: 'top', offset: [0, -8] })
-      L.marker(coords[0], { icon: endIcon('A'), interactive: false }).addTo(layer)
-      L.marker(coords[coords.length - 1], { icon: endIcon('B'), interactive: false }).addTo(layer)
-      lines.set(s.id, { line, casing })
+      line.on('mouseout', highlight)
+      line.bindTooltip(tipText, { sticky: true, direction: 'top', offset: [0, -8] })
+      L.marker(coords[0], { icon: endIcon('A'), interactive: false }).addTo(segLayer)
+      L.marker(coords[coords.length - 1], { icon: endIcon('B'), interactive: false }).addTo(segLayer)
+
+      const center = midpoint(coords)
+      const point = L.circleMarker(center, {
+        radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1, bubblingMouseEvents: false,
+      }).addTo(pointLayer)
+      point.on('click', () => select(s.id))
+      point.on('mouseover', () => point.setStyle({ radius: 11 }))
+      point.on('mouseout', highlight)
+      point.bindTooltip(tipText, { direction: 'top', offset: [0, -10] })
+      shapes.set(s.id, { line, point, center })
       bounds.push(...coords)
     }
     const li = document.createElement('li')
@@ -179,8 +259,9 @@ async function refresh() {
       <span class="meta"><span class="dot ${st.dot}"></span>${st.text}</span></a>`
     li.firstElementChild.addEventListener('click', (e) => {
       e.preventDefault()
-      const l = lines.get(s.id)
-      if (l) map.flyToBounds(l.line.getBounds(), { ...pads(true), maxZoom: 17, duration: 0.6 })
+      const sh = shapes.get(s.id)
+      if (!sh) return select(s.id)
+      map.flyToBounds(sh.line.getBounds(), { ...pads(true), maxZoom: 17, duration: 0.6 })
       setTimeout(() => select(s.id), 650)
     })
     list.append(li)
@@ -192,7 +273,10 @@ async function refresh() {
   if (!sites.length) list.innerHTML = '<li class="muted small" style="padding:.8rem">Aún no hay estaciones.</li>'
   $('map-updated').textContent = `act. ${new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })}`
   $('map-counter').innerHTML = `<span class="n${live ? '' : ' none'}">${live}</span><span class="k">de ${sites.length} equipos<br>contando ahora</span>`
+  // una estación borrada deja de estar en los paneles
+  for (const id of [...stack]) if (!siteById(id)) closeSite(id)
   highlight()
+  applyZoom()
 }
 
 export async function showMap() {
@@ -204,11 +288,23 @@ export async function showMap() {
       className: 'tiles-gray',
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map)
-    layer = L.layerGroup().addTo(map)
+    segLayer = L.layerGroup()
+    pointLayer = L.layerGroup()
     legend()
     $('drawer-close').innerHTML = icon('close', 22)
-    $('drawer-close').addEventListener('click', closeDrawer)
-    map.on('click', closeDrawer)
+    $('drawer-close').addEventListener('click', () => active && closeSite(active))
+    $('drawer-tabs').addEventListener('click', (e) => {
+      const x = e.target.closest('[data-close]')
+      if (x) return closeSite(x.dataset.close)
+      const o = e.target.closest('[data-open]')
+      if (o) select(o.dataset.open)
+    })
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !active || $('view-map').hidden || e.target.closest?.('input, textarea')) return
+      closeSite(active)
+    })
+    map.on('click', () => map.closePopup())
+    map.on('zoomend', applyZoom)
   }
   setTimeout(() => map.invalidateSize(), 0)
   await refresh()

@@ -252,6 +252,63 @@ function highlightColumn(g, seriesName, ctx, cx) {
   ctx.restore()
 }
 
+/** Título de un intervalo: «lun 24 nov, 06:00–07:00» (o solo el día). */
+function bucketTitle(t) {
+  const d = new Date(t)
+  const day = d.toLocaleDateString('es-EC', { weekday: 'short', day: 'numeric', month: 'short' })
+  if (st.bucket === 1440) return day
+  const hm = (x) => x.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return `${day}, ${hm(d)}–${hm(new Date(t + st.bucket * 60_000))}`
+}
+
+/**
+ * Detalle flotante junto a la barra bajo el cursor: valor de cada clase visible, total y minutos medidos. Va a la
+ * derecha de la barra (a la izquierda si no cabe) y a la altura de su cima.
+ */
+function showSeriesTip(g, points, row) {
+  const tip = $('series-tip')
+  const b = st.buckets?.[row]
+  if (!g || !b) return void (tip.hidden = true)
+  const ms = st.bucket * 60_000
+  const roll = g.rollPeriod()
+  const num = (v) => Number(v).toLocaleString('es-EC', { maximumFractionDigits: roll > 1 ? 1 : 0 })
+  const vals = points.filter((p) => Number.isFinite(p.yval))
+  const total = vals.reduce((s, p) => s + p.yval, 0)
+  let html = `<h4>${esc(bucketTitle(b.t))}</h4>`
+  if (!b.values || !vals.length) {
+    html += '<div class="tnote">Sin datos en este intervalo</div>'
+  } else {
+    html += vals
+      .map((p) => `<div class="r"><i style="background:${COLOR_OF[p.name] ?? '#999'}"></i><span>${esc(p.name)}</span><b>${num(p.yval)}</b></div>`)
+      .join('')
+    html += `<div class="r tot"><i></i><span>Total</span><b>${num(total)}</b></div>`
+    if (b.coverage < 0.999) {
+      const done = st.bucket === 1440
+        ? `${(b.coverage * 24).toLocaleString('es-EC', { maximumFractionDigits: 1 })} de 24 h`
+        : `${Math.round(b.coverage * st.bucket)} de ${st.bucket} min`
+      html += `<div class="tnote">Medido ${done}</div>`
+    }
+    if (roll > 1) html += `<div class="tnote">Media de ${roll} intervalos</div>`
+  }
+  tip.innerHTML = html
+  tip.hidden = false
+  const area = g.getArea()
+  const chart = $('chart-series')
+  const x1 = g.toDomXCoord(b.t)
+  const x2 = g.toDomXCoord(b.t + ms)
+  const tw = tip.offsetWidth
+  const th = tip.offsetHeight
+  let left = x2 + 10
+  const flip = left + tw > area.x + area.w
+  if (flip) left = Math.max(0, x1 - tw - 10)
+  const yTop = total > 0 ? g.toDomYCoord(total) : area.y + area.h / 2
+  const top = Math.max(area.y, Math.min(yTop - 18, area.y + area.h - th))
+  tip.classList.toggle('flip', flip)
+  tip.style.left = `${chart.offsetLeft + left}px`
+  tip.style.top = `${chart.offsetTop + top}px`
+  tip.style.setProperty('--ay', `${Math.max(10, Math.min(th - 10, yTop - top))}px`)
+}
+
 /** Ventana inicial: con muchos intervalos, la gráfica abre en el tramo final y el selector de abajo recorre el resto. */
 function initialWindow(buckets) {
   if (!buckets.length) return null
@@ -264,6 +321,8 @@ function initialWindow(buckets) {
 
 function renderSeries({ keepWindow = false } = {}) {
   const buckets = buildBuckets()
+  st.buckets = buckets
+  $('series-tip').hidden = true
   const data = buckets.map((b) => [new Date(b.t), ...CLASSES.map((c) => (b.values ? b.values[c.key] : null))])
   const ms = st.bucket * 60_000
   // fila vacía al final: la última barra (que ocupa [t, t + intervalo]) entra completa al restablecer el zoom
@@ -294,9 +353,9 @@ function renderSeries({ keepWindow = false } = {}) {
     rangeSelectorForegroundStrokeColor: '#6b7280',
     showRoller: true,
     rollPeriod: 1,
-    legend: 'always',
-    labelsDiv: $('chart-series-legend'),
-    labelsSeparateLines: false,
+    legend: 'never',
+    highlightCallback: (e, x, points, row) => showSeriesTip(st.graphs.series, points, row),
+    unhighlightCallback: () => ($('series-tip').hidden = true),
     ylabel: `Usuarios / ${unit}`,
     axisLineColor: '#cbd2d9',
     gridLineColor: '#eef0f3',
@@ -307,13 +366,7 @@ function renderSeries({ keepWindow = false } = {}) {
       x: {
         axisLabelFontSize: 12,
         drawGrid: true,
-        valueFormatter: (t) => {
-          const d = new Date(t)
-          const day = d.toLocaleDateString('es-EC', { weekday: 'short', day: 'numeric', month: 'short' })
-          if (st.bucket === 1440) return day
-          const hm = (x) => x.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', hour12: false })
-          return `${day}, ${hm(d)}–${hm(new Date(t + ms))}`
-        },
+        valueFormatter: (t) => bucketTitle(t),
       },
       y: { axisLabelFontSize: 12, axisLabelWidth: 46 },
     },

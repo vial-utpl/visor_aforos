@@ -135,10 +135,24 @@ path.leaflet-interactive:focus:not(:focus-visible) { outline: none; }
 
 /* panel lateral (drawer) */
 .drawer {
-  position: absolute; z-index: 1050; top: 0; right: 0; bottom: 0; width: min(400px, 100%); background: var(--hero); color: #f3f4f6;
-  box-shadow: var(--shadow-lg); padding: 1.6rem 1.5rem; overflow: auto; animation: slidein 0.22s ease-out;
+  position: absolute; z-index: 1050; top: 0; right: 0; bottom: 0; max-width: 100%; display: flex; color: #f3f4f6;
+  box-shadow: var(--shadow-lg); animation: slidein 0.22s ease-out;
 }
+.drawer[hidden] { display: none; }
 @keyframes slidein { from { transform: translateX(30px); opacity: 0; } }
+.drawer-panel { position: relative; width: min(400px, 100vw); background: var(--hero); padding: 1.6rem 1.5rem; overflow: auto; }
+/* paneles anteriores: pestañas verticales con el nombre (se lee de abajo arriba) */
+.drawer-tabs { display: flex; }
+.dtab { width: 40px; display: flex; flex-direction: column; align-items: center; gap: 0.3rem; padding: 8px 0 0; background: #111418; border-right: 1px solid rgba(255, 255, 255, 0.08); }
+.dtab:hover { background: #1a1f26; }
+.dtab-x { color: #d1d5db; }
+.dtab-x:hover { background: rgba(255, 255, 255, 0.12); }
+.dtab-name {
+  flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+  padding: 0 0 1rem; border: 0; border-radius: 0; background: none; color: #f3f4f6;
+}
+.dtab-name:hover { border: 0; }
+.dtab-name span { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 100%; font-size: 0.9rem; font-weight: 500; letter-spacing: 0.02em; }
 .drawer-close { position: absolute; top: 10px; right: 10px; color: #f3f4f6; }
 .drawer-close:hover { background: rgba(255, 255, 255, 0.1); }
 .drawer h2 { font-size: 1.5rem; line-height: 1.15; margin: 0 2rem 0.3rem 0; }
@@ -209,8 +223,23 @@ path.leaflet-interactive:focus:not(:focus-visible) { outline: none; }
 .ts-wrap { position: relative; }
 .chart { width: 100%; height: 400px; }
 .small-chart { height: 270px; }
-.ts-legend { min-height: 1.5em; font-size: 0.84rem; color: var(--muted); text-align: center; }
-.ts-legend b, .chart-legend b { color: var(--text); font-weight: 600; }
+.ts-tip {
+  position: absolute; z-index: 5; pointer-events: none; min-width: 180px; background: #1f2329; color: #f3f4f6; border-radius: 8px;
+  padding: 0.55rem 0.75rem 0.6rem; font-size: 0.84rem; line-height: 1.55; box-shadow: var(--shadow-lg);
+}
+.ts-tip::before {
+  content: ''; position: absolute; left: -7px; top: calc(var(--ay, 18px) - 7px);
+  border-top: 7px solid transparent; border-bottom: 7px solid transparent; border-right: 7px solid #1f2329;
+}
+.ts-tip.flip::before { left: auto; right: -7px; border-right: 0; border-left: 7px solid #1f2329; }
+.ts-tip h4 { margin: 0 0 0.3rem; font-size: 0.9rem; font-weight: 600; }
+.ts-tip .r { display: grid; grid-template-columns: 13px 1fr auto; gap: 0.5rem; align-items: center; }
+.ts-tip .r i { width: 13px; height: 13px; border-radius: 2px; border: 1px solid rgba(255, 255, 255, 0.35); }
+.ts-tip .r b { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.ts-tip .tot { margin-top: 0.25rem; padding-top: 0.25rem; border-top: 1px solid rgba(255, 255, 255, 0.15); }
+.ts-tip .tot i { border: 0; }
+.ts-tip .tnote { color: #9ca3af; font-size: 0.76rem; }
+.chart-legend b { color: var(--text); font-weight: 600; }
 .chart-legend { min-height: 1.4em; font-size: 0.82rem; color: var(--muted); }
 .ts-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.8rem; }
 .ts-toggles { display: flex; flex-wrap: wrap; gap: 0.4rem; }
@@ -264,7 +293,13 @@ path.leaflet-interactive:focus:not(:focus-visible) { outline: none; }
   .leaflet-control-zoom { margin-left: 10px !important; }
   .map-legend { top: 10px; bottom: auto; left: auto; right: 10px; }
   .map-counter { display: none; }
-  .drawer { width: 100%; }
+  .drawer { left: 0; flex-direction: column; }
+  .drawer-panel { width: 100%; flex: 1; }
+  .drawer-tabs { overflow-x: auto; background: #111418; }
+  .drawer-tabs:empty { display: none; }
+  .dtab { width: auto; max-width: 60vw; height: 40px; flex-direction: row; padding: 0 0.6rem 0 0.3rem; border-right: 1px solid rgba(255, 255, 255, 0.08); }
+  .dtab-name { flex-direction: row; padding: 0; min-width: 0; }
+  .dtab-name span { writing-mode: horizontal-tb; transform: none; font-size: 0.85rem; }
   .toolbar { position: static; }
   .user { display: none; }
   .split-list li { grid-template-columns: 22px 90px 1fr 56px; font-size: 0.85rem; }
