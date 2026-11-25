@@ -1,12 +1,13 @@
-// Arranque: sesión (solo usuarios invitados) y rutas por hash: #/ mapa, #/estacion/<id>, #/admin (requiere sesión).
+// Arranque: sesión y rutas por hash: #/ portada, #/mapa, #/estacion/<id>, #/admin (requiere sesión).
 import { db } from './data.js'
 import { REQUIRE_LOGIN } from './config.js'
+import { showHome, leaveHome } from './home.js'
 import { showMap, leaveMap } from './map.js'
 import { showSite, leaveSite } from './station.js'
 import { showAdmin, leaveAdmin } from './admin.js'
 
 const $ = (id) => document.getElementById(id)
-const views = ['view-login', 'view-map', 'view-site', 'view-admin']
+const views = ['view-login', 'view-home', 'view-map', 'view-site', 'view-admin']
 
 // Un enlace de invitación o de recuperación trae la sesión en la URL: después hay que fijar la contraseña.
 const mustSetPassword = /type=(invite|recovery)/.test(location.hash + location.search)
@@ -21,6 +22,12 @@ export function toast(text, ms = 4000) {
 
 function show(view) {
   for (const v of views) $(v).hidden = v !== view
+  if (view !== 'view-home') leaveHome()
+  if (view !== 'view-map') leaveMap()
+  if (view !== 'view-site') leaveSite()
+  // enlace activo arriba
+  const tab = { 'view-home': 'nav-home', 'view-map': 'nav-map', 'view-site': 'nav-map', 'view-admin': 'nav-admin' }[view]
+  for (const id of ['nav-home', 'nav-map', 'nav-admin']) $(id).classList.toggle('on', id === tab)
 }
 
 async function route() {
@@ -50,13 +57,15 @@ async function route() {
   leaveAdmin()
   const m = location.hash.match(/^#\/estacion\/([0-9a-f-]{36})/)
   if (m) {
-    leaveMap()
     show('view-site')
     await showSite(m[1])
-  } else {
-    leaveSite()
+  } else if (/^#\/mapa\b/.test(location.hash)) {
     show('view-map')
     await showMap()
+  } else {
+    show('view-home')
+    scrollTo(0, 0)
+    await showHome()
   }
 }
 

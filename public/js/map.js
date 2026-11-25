@@ -17,7 +17,9 @@ const SCALE = [
 const OFF = '#9ca3af'
 const REFRESH_MS = 60_000
 const DAY = 86_400_000
-const POINT_ZOOM = 15 // por debajo de este zoom las estaciones se dibujan como puntos
+// Por debajo de este zoom las estaciones se dibujan como puntos (a zoom 15 un tramo de 150 m mide ~30 px y las
+// marcas A y B lo tapan).
+const POINT_ZOOM = 16
 const MAX_STACK = 5 // paneles abiertos a la vez (el más antiguo se cierra)
 const WEEK_CACHE_MS = 5 * 60_000
 
@@ -303,7 +305,7 @@ async function refresh() {
       bounds.push(...coords)
     }
     const li = document.createElement('li')
-    li.innerHTML = `<a href="#/" data-id="${s.id}"><span class="bar" style="background:${color}"></span>
+    li.innerHTML = `<a href="#/mapa" data-id="${s.id}"><span class="bar" style="background:${color}"></span>
       <span class="name">${esc(s.name)}</span>
       <span class="vph">${fmt(s.vehicles_last_hour)}<small>veh/h</small></span>
       <span class="meta"><span class="dot ${st.dot}"></span>${st.text}</span></a>`

@@ -23,7 +23,8 @@
       <span>Visor de Aforos</span>
     </a>
     <nav class="topnav" id="topnav" hidden>
-      <a href="#/" id="nav-map">Mapa</a>
+      <a href="#/" id="nav-home">Inicio</a>
+      <a href="#/mapa" id="nav-map">Mapa</a>
       <a href="#/admin" id="nav-admin">Administrar</a>
       <span class="user" id="user-email"></span>
       <button class="link" id="logout">Salir</button>
@@ -48,6 +49,61 @@
       <button type="submit" class="primary">Guardar</button>
       <p class="msg" id="password-msg" role="status"></p>
     </form>
+  </main>
+
+  <!-- Portada -->
+  <main id="view-home" class="view home-view" hidden>
+    <section class="h-scroll" id="home-scroll">
+      <div class="h-sticky">
+        <div class="h-head">
+          <div class="h-intro" id="home-intro">
+            <h1>Contamos lo que pasa<br>por las calles de Loja</h1>
+            <p>Cámaras con visión artificial cuentan autos, motos, buses, camiones, bicicletas y peatones, por sentido y
+              cada 15 minutos. Los totales llegan a este visor, abierto para todos.</p>
+          </div>
+          <p class="h-now off" id="home-now" aria-live="polite"></p>
+        </div>
+        <svg class="h-svg" id="home-svg" viewBox="0 0 1600 640" preserveAspectRatio="xMidYMax slice" role="img"
+          aria-label="Una cámara en un poste junto a la calle detecta cada vehículo que pasa y lo suma al cruzar la línea de conteo"></svg>
+        <div class="h-hud" id="home-hud" aria-label="Conteo de la escena"></div>
+        <div class="h-hint" id="home-hint"><b>Desliza</b><span>para ver cómo contamos</span></div>
+      </div>
+    </section>
+
+    <section class="h-section">
+      <div class="h-steps">
+        <div class="h-step reveal"><span class="n">1</span><h3>La cámara mira la calle</h3>
+          <p>Un equipo con visión artificial, junto a la vía, reconoce cada vehículo y peatón en el video. El video se
+            procesa en el propio equipo: al visor no se envían imágenes.</p></div>
+        <div class="h-step reveal"><span class="n">2</span><h3>Cuenta al cruzar la línea</h3>
+          <p>Cada uno suma en su clase y en su sentido, de A hacia B o de B hacia A, al cruzar la línea de conteo del
+            tramo.</p></div>
+        <div class="h-step reveal"><span class="n">3</span><h3>Los totales llegan al visor</h3>
+          <p>Cada 15 minutos el equipo envía solo los totales. Si se queda sin internet, los guarda y los sube cuando
+            vuelve la conexión.</p></div>
+      </div>
+    </section>
+
+    <section class="h-section h-count">
+      <p class="h-big" id="home-total">–</p>
+      <p class="h-big-sub" id="home-total-sub"></p>
+    </section>
+
+    <section class="h-section">
+      <div class="h-title reveal">
+        <h2>Clase por clase</h2>
+        <p class="muted">Todo lo contado hasta hoy. Toque una para ir al mapa de estaciones.</p>
+      </div>
+      <div class="h-classes" id="home-classes"></div>
+    </section>
+
+    <section class="h-section h-cta reveal">
+      <h2>Mire cada estación en vivo</h2>
+      <p class="muted">Vehículos de la última hora, los últimos 7 días y las series por intervalo de cada tramo.</p>
+      <a class="btn-more" href="#/mapa">Abrir el mapa →</a>
+    </section>
+
+    <footer class="h-foot">Visor de Aforos · conteo automático con FreeCount Traffic · Mapa © OpenStreetMap</footer>
   </main>
 
   <!-- Mapa de estaciones -->
@@ -78,7 +134,7 @@
   <main id="view-site" class="view site-view" hidden>
     <section class="hero">
       <div class="hero-inner">
-        <a href="#/" class="back">← Volver al mapa</a>
+        <a href="#/mapa" class="back">← Volver al mapa</a>
         <h1 id="site-name"></h1>
         <p class="hero-sub" id="site-desc"></p>
         <div class="chips" id="site-chips"></div>
