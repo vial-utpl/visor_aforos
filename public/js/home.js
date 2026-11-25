@@ -4,6 +4,7 @@
 // subir y bajar es exactamente reversible. Con "reducir movimiento" la escena queda quieta.
 import { CLASSES, db, siteOverview, liveState, fmt, esc } from './data.js'
 import { icon } from './icons.js'
+import { lojaSkyline } from './skyline.js'
 
 const $ = (id) => document.getElementById(id)
 const SVGNS = 'http://www.w3.org/2000/svg'
@@ -88,12 +89,6 @@ function wheel(x, r) {
 
 /** Fondo de la escena: cielo, cerros, ciudad, vía, poste con la cámara, cono de visión y línea de conteo. */
 function sceneSvg() {
-  const buildings = Array.from({ length: 26 }, (_, i) => {
-    const w = 44 + ((i * 37) % 50)
-    const h = 60 + ((i * 53) % 110)
-    const x = i * 64 - 20
-    return `<rect x="${x}" y="${420 - h}" width="${w}" height="${h}" rx="3"/>`
-  }).join('')
   const dashes = Array.from({ length: 23 }, (_, i) => `<rect x="${i * 72}" y="521" width="40" height="5" rx="2"/>`).join('')
   return `
     <defs>
@@ -103,7 +98,7 @@ function sceneSvg() {
     <rect width="1600" height="640" fill="url(#h-sky)"/>
     <path fill="#dfe8ef" d="M0,330 C120,250 230,240 340,300 C430,230 560,190 690,280 C800,220 900,200 1010,270 C1120,210 1260,180 1380,260 C1480,220 1560,240 1600,250 L1600,420 L0,420 Z"/>
     <path fill="#d3dee7" d="M0,370 C160,320 260,330 380,360 C520,300 640,320 760,350 C900,300 1040,310 1160,350 C1300,310 1450,320 1600,340 L1600,420 L0,420 Z"/>
-    <g fill="#c9d3dc" opacity=".85">${buildings}</g>
+    ${lojaSkyline()}
     <rect y="418" width="1600" height="16" fill="#cfd6dd"/>
     <rect y="434" width="1600" height="140" fill="#e3e7eb"/>
     <g fill="#ffffff">${dashes}</g>

@@ -430,3 +430,9 @@ button.danger { color: #b42318; }
   .h-chip span { display: none; }
   .h-section { padding: 3rem 1rem; }
 }
+/* silueta de Loja (portada) */
+.skyline .sk { fill: #e6edf3; stroke: #93a3b3; stroke-width: 2; stroke-linejoin: round; }
+.skyline .sk-alt { fill: #edf1f5; }
+.skyline .sk-w { fill: #cdd8e2; stroke: #93a3b3; stroke-width: 1.5; }
+.skyline .sk-l { fill: none; stroke: #93a3b3; stroke-width: 1.5; stroke-linecap: round; }
+.skyline .sk-roof { fill: #dcc7bd; stroke: #93a3b3; stroke-width: 2; stroke-linejoin: round; }
