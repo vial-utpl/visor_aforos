@@ -4,20 +4,35 @@
 // subir y bajar es exactamente reversible. Con "reducir movimiento" la escena queda quieta.
 import { CLASSES, db, siteOverview, liveState, fmt, esc } from './data.js'
 import { icon } from './icons.js'
-import { lojaSkyline } from './skyline.js'
 
 const $ = (id) => document.getElementById(id)
 const SVGNS = 'http://www.w3.org/2000/svg'
 const C = Object.fromEntries(CLASSES.map((c) => [c.key, c]))
 
-// Escena (viewBox 1600 × 640): carril lejano B→A, carril cercano A→B, línea de conteo en x = 900.
+// Escena (viewBox 1600 × 720): cielo arriba (ahí va el título), la silueta de Loja con su suelo en y = 524, la acera
+// lejana, la vía con el carril B→A arriba y el A→B abajo, y la acera cercana. Línea de conteo en x = 900.
+const W = 1600
+const H = 720
+const GROUND = 524
 const LINE_X = 900
 const CONE = [640, 1190] // tramo de la vía que ve la cámara
-const LANE = { ba: 492, ab: 556, walk: 424 }
-const NAME = { car: 'Auto', motorcycle: 'Moto', bus: 'Bus', truck: 'Camión', bicycle: 'Bicicleta', person: 'Peatón' }
+const LANE = { walk: GROUND + 14, ba: GROUND + 74, ab: GROUND + 144 }
+const NAME = { car: 'Auto', taxi: 'Taxi', motorcycle: 'Moto', bus: 'Bus', truck: 'Camión', bicycle: 'Bicicleta', person: 'Peatón' }
 const PLURAL = { car: 'Autos', motorcycle: 'Motos', bus: 'Buses', truck: 'Camiones', bicycle: 'Bicicletas', person: 'Peatones' }
+const IMG = 'img/portada/'
 
-// Lo que pasa frente a la cámara, en orden. dir: ab = de izquierda a derecha.
+// Ilustraciones de perfil mirando a la derecha (img/portada, generadas para el visor): ancho y alto en la escena.
+const SPRITES = {
+  car: { w: 120, h: 47 },
+  taxi: { w: 120, h: 50 },
+  bus: { w: 272, h: 101 },
+  truck: { w: 240, h: 97 },
+  motorcycle: { w: 62, h: 52 },
+  bicycle: { w: 56, h: 58 },
+  person: { w: 31, h: 52 },
+}
+
+// Lo que pasa frente a la cámara, en orden. dir: ab = de izquierda a derecha; sprite: el dibujo si no es el de la clase.
 const EVENTS = [
   { cls: 'car', dir: 'ab' },
   { cls: 'motorcycle', dir: 'ba' },
@@ -25,93 +40,46 @@ const EVENTS = [
   { cls: 'person', dir: 'ba', lane: 'walk' },
   { cls: 'truck', dir: 'ba' },
   { cls: 'bicycle', dir: 'ab' },
-  { cls: 'car', dir: 'ba' },
+  { cls: 'car', sprite: 'taxi', dir: 'ba' },
   { cls: 'motorcycle', dir: 'ab' },
 ]
 const START = 0.05
 const STEP = 0.105
 const TRAVEL = 0.2 // fracción del scroll que tarda cada uno en cruzar la escena
-const FROM = -220
-const TO = 1820
+const FROM = -260
+const TO = 1860
 
-// Siluetas de perfil mirando a la derecha, con el suelo en y = 0. w/h: recuadro de detección.
-const SHAPES = {
-  car: {
-    w: 156, h: 62,
-    svg: (c) => `<path fill="${c}" d="M-76,-14 L-73,-30 Q-69,-37 -58,-38 L-38,-39 L-20,-57 Q-14,-61 -4,-61 L30,-61 Q41,-61 47,-55 L63,-39 L69,-37 Q77,-34 77,-25 L77,-13 Q77,-9 72,-9 L-72,-9 Q-76,-9 -76,-14 Z"/>
-      <path fill="#d7e8f1" d="M-31,-41 L-17,-55 L6,-55 L6,-41 Z M12,-55 L35,-55 L49,-41 L12,-41 Z"/>
-      <rect x="70" y="-31" width="7" height="6" rx="2" fill="#fde68a"/>
-      ${wheel(-44, 13)}${wheel(46, 13)}`,
-  },
-  bus: {
-    w: 270, h: 108,
-    svg: (c) => `<rect x="-134" y="-104" width="268" height="92" rx="12" fill="${c}"/>
-      <rect x="-122" y="-92" width="196" height="34" rx="4" fill="#fdf3d6"/>
-      <path d="M-73,-92 V-58 M-24,-92 V-58 M25,-92 V-58" stroke="${c}" stroke-width="5"/>
-      <rect x="86" y="-92" width="38" height="66" rx="4" fill="#fdf3d6"/>
-      <rect x="-134" y="-40" width="268" height="7" fill="rgba(0,0,0,.12)"/>
-      ${wheel(-88, 15)}${wheel(84, 15)}`,
-  },
-  truck: {
-    w: 250, h: 112,
-    svg: (c) => `<rect x="-124" y="-110" width="176" height="92" rx="5" fill="${c}"/>
-      <path fill="${c}" d="M58,-80 L98,-80 Q106,-80 110,-72 L124,-46 L124,-18 L58,-18 Z"/>
-      <path fill="#d7e8f1" d="M72,-72 L96,-72 L108,-50 L72,-50 Z"/>
-      <rect x="-124" y="-30" width="248" height="10" fill="#374151"/>
-      ${wheel(-92, 14)}${wheel(-56, 14)}${wheel(90, 14)}`,
-  },
-  motorcycle: {
-    w: 104, h: 92,
-    svg: (c) => `${wheel(-34, 13)}${wheel(36, 13)}
-      <path fill="${c}" d="M-34,-13 L-8,-34 L22,-36 L36,-13 L26,-13 L16,-26 L-6,-24 L-22,-13 Z"/>
-      <path d="M22,-36 L30,-50" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
-      <path d="M-4,-38 L4,-62 M4,-62 L18,-48" stroke="#374151" stroke-width="7" stroke-linecap="round"/>
-      <circle cx="6" cy="-74" r="11" fill="${c}"/><rect x="8" y="-78" width="9" height="5" rx="2" fill="#d7e8f1"/>`,
-  },
-  bicycle: {
-    w: 96, h: 96,
-    svg: (c) => `<circle cx="-28" cy="-16" r="16" fill="none" stroke="#374151" stroke-width="4"/>
-      <circle cx="30" cy="-16" r="16" fill="none" stroke="#374151" stroke-width="4"/>
-      <path d="M-28,-16 L-8,-44 L20,-44 L30,-16 M-8,-44 L2,-16 L-28,-16 M20,-44 L16,-54" fill="none" stroke="${c}" stroke-width="5" stroke-linejoin="round"/>
-      <path d="M-6,-50 L4,-74 L18,-56 M4,-74 L-2,-50" fill="none" stroke="${c}" stroke-width="7" stroke-linecap="round"/>
-      <circle cx="6" cy="-86" r="9" fill="${c}"/>`,
-  },
-  person: {
-    w: 40, h: 96,
-    svg: (c) => `<circle cx="0" cy="-84" r="9" fill="${c}"/>
-      <path d="M0,-72 L0,-38 M0,-38 L-10,0 M0,-38 L12,-2 M0,-64 L-12,-44 M0,-64 L12,-46" fill="none" stroke="${c}" stroke-width="7" stroke-linecap="round"/>`,
-  },
-}
-
-function wheel(x, r) {
-  return `<circle cx="${x}" cy="-${r}" r="${r}" fill="#1f2329"/><circle cx="${x}" cy="-${r}" r="${r * 0.4}" fill="#9ca3af"/>`
-}
-
-/** Fondo de la escena: cielo, cerros, ciudad, vía, poste con la cámara, cono de visión y línea de conteo. */
+/** Fondo: cielo, la silueta de Loja (dos panorámicas unidas, con el parque eólico Villonaco en los cerros), aceras, vía,
+ *  poste con la cámara, cono de visión y línea de conteo. */
 function sceneSvg() {
-  const dashes = Array.from({ length: 23 }, (_, i) => `<rect x="${i * 72}" y="521" width="40" height="5" rx="2"/>`).join('')
+  const far = 3200 // las bandas de la vía siguen más allá del viewBox
+  const dashes = Array.from({ length: 90 }, (_, i) => `<rect x="${i * 72 - far}" y="${GROUND + 86}" width="40" height="5" rx="2"/>`).join('')
+  const panH = (W / 3000) * 500 // panorama 3000 × 500, suelo a 446 px
+  const panY = GROUND - (W / 3000) * 446
+  const band = (y, h, fill) => `<rect x="${-far}" y="${y}" width="${W + 2 * far}" height="${h}" fill="${fill}"/>`
   return `
     <defs>
-      <linearGradient id="h-sky" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e8f1f8"/><stop offset="1" stop-color="#f5f8fb"/></linearGradient>
       <linearGradient id="h-cone" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#16a37f" stop-opacity=".05"/><stop offset="1" stop-color="#16a37f" stop-opacity=".22"/></linearGradient>
     </defs>
-    <rect width="1600" height="640" fill="url(#h-sky)"/>
-    <path fill="#dfe8ef" d="M0,330 C120,250 230,240 340,300 C430,230 560,190 690,280 C800,220 900,200 1010,270 C1120,210 1260,180 1380,260 C1480,220 1560,240 1600,250 L1600,420 L0,420 Z"/>
-    <path fill="#d3dee7" d="M0,370 C160,320 260,330 380,360 C520,300 640,320 760,350 C900,300 1040,310 1160,350 C1300,310 1450,320 1600,340 L1600,420 L0,420 Z"/>
-    ${lojaSkyline()}
-    <rect y="418" width="1600" height="16" fill="#cfd6dd"/>
-    <rect y="434" width="1600" height="140" fill="#e3e7eb"/>
+    ${band(-600, H + 1200, '#e6eff7')}
+    <image href="${IMG}loja-panorama.webp" x="0" y="${panY}" width="${W}" height="${panH}" preserveAspectRatio="none"/>
+    ${band(GROUND - 1, 17, '#cfd8e0')}
+    ${band(GROUND + 16, 140, '#e1e6eb')}
     <g fill="#ffffff">${dashes}</g>
-    <rect y="574" width="1600" height="66" fill="#cfd6dd"/>
-    <polygon points="616,336 ${CONE[1]},590 ${CONE[0]},590" fill="url(#h-cone)"/>
-    <line x1="${LINE_X}" x2="${LINE_X}" y1="430" y2="592" stroke="#16a37f" stroke-width="3" stroke-dasharray="10 8"/>
-    <text x="${LINE_X}" y="612" text-anchor="middle" class="h-svg-note">línea de conteo</text>
-    <rect x="552" y="318" width="9" height="104" rx="3" fill="#4b5563"/>
-    <path d="M556,328 L598,328" stroke="#4b5563" stroke-width="6" stroke-linecap="round"/>
-    <rect x="586" y="316" width="38" height="24" rx="6" fill="#1f2937"/><circle cx="619" cy="328" r="6" fill="#16a37f"/>
-    <g class="h-end"><circle cx="46" cy="504" r="20"/><text x="46" y="511" text-anchor="middle">A</text></g>
-    <g class="h-end"><circle cx="1554" cy="504" r="20"/><text x="1554" y="511" text-anchor="middle">B</text></g>`
+    ${band(GROUND + 156, 600, '#cfd8e0')}
+    <polygon points="589,${GROUND - 156} ${CONE[1]},${GROUND + 160} ${CONE[0]},${GROUND + 160}" fill="url(#h-cone)"/>
+    <line x1="${LINE_X}" x2="${LINE_X}" y1="${GROUND + 12}" y2="${GROUND + 160}" stroke="#16a37f" stroke-width="3" stroke-dasharray="10 8"/>
+    <text x="${LINE_X}" y="${GROUND + 182}" text-anchor="middle" class="h-svg-note">línea de conteo</text>
+    <image href="${IMG}pole.webp" x="538" y="${GROUND + 10 - 170}" width="55" height="170"/>
+    <g class="h-end"><circle cx="46" cy="${GROUND + 86}" r="20"/><text x="46" y="${GROUND + 93}" text-anchor="middle">A</text></g>
+    <g class="h-end"><circle cx="1554" cy="${GROUND + 86}" r="20"/><text x="1554" y="${GROUND + 93}" text-anchor="middle">B</text></g>`
 }
+
+/** La escena llena el espacio y se recorta a los lados (o arriba, en el cielo) según la forma de la pantalla. */
+function fitScene() {
+  $('home-svg').setAttribute('preserveAspectRatio', 'xMidYMax slice')
+}
+
 
 // ---------------------------------------------------------------------------------------------------------------
 // Escena con scroll
@@ -125,21 +93,21 @@ let lastP = -1
 function buildScene() {
   const svg = $('home-svg')
   svg.innerHTML = sceneSvg()
-  actors = EVENTS.map((e) => {
-    const shape = SHAPES[e.cls]
-    const color = C[e.cls].color
+  actors = EVENTS.map((e, i) => {
+    const sp = SPRITES[e.sprite ?? e.cls]
     const g = document.createElementNS(SVGNS, 'g')
-    g.innerHTML = shape.svg(color)
+    g.innerHTML = `<image href="${IMG}${e.sprite ?? e.cls}.webp" x="${-sp.w / 2}" y="${-sp.h}" width="${sp.w}" height="${sp.h}"/>`
     const box = document.createElementNS(SVGNS, 'g')
     box.setAttribute('class', 'h-box')
-    const bw = shape.w + 16
-    const bh = shape.h + 16
+    const bw = sp.w + 16
+    const bh = sp.h + 14
+    const label = `${NAME[e.sprite ?? e.cls].toUpperCase()} ${e.dir === 'ab' ? 'A→B' : 'B→A'}`
     box.innerHTML = `<rect class="frame" x="${-bw / 2}" y="${-bh + 4}" width="${bw}" height="${bh}" rx="6"/>
-      <g class="h-tag" transform="translate(${-bw / 2},${-bh - 22})"><rect width="${NAME[e.cls].length * 11 + 54}" height="24" rx="6"/>
-      <text x="9" y="17">${NAME[e.cls].toUpperCase()} ${e.dir === 'ab' ? 'A→B' : 'B→A'}</text></g>
+      <g class="h-tag" transform="translate(${-bw / 2},${-bh - 22})"><rect width="${label.length * 9.4 + 18}" height="24" rx="6"/>
+      <text x="9" y="17">${label}</text></g>
       <text class="h-plus" x="${bw / 2 - 4}" y="${-bh - 4}" text-anchor="end">+1</text>`
     svg.append(g, box)
-    return { ...e, g, box, y: LANE[e.lane ?? e.dir], start: START + EVENTS.indexOf(e) * STEP }
+    return { ...e, g, box, y: LANE[e.lane ?? e.dir], start: START + i * STEP }
   })
   $('home-hud').innerHTML = CLASSES.slice()
     .reverse()
@@ -181,13 +149,14 @@ function render(p) {
   }
   counts = next
   // título: lo que la cámara está viendo, o el mensaje inicial
-  const title = p < START + 0.03 ? null : focus ? `${focus.cls}|${focus.dir}` : shownTitle
+  const title = p < START + 0.03 ? null : focus ? `${focus.sprite ?? focus.cls}|${focus.dir}` : shownTitle
   if (title !== shownTitle) {
     shownTitle = title
-    const [cls, dir] = title ? title.split('|') : []
+    const [kind, dir] = title ? title.split('|') : []
+    const cls = kind === 'taxi' ? 'car' : kind
     $('home-intro').classList.toggle('off', !!title)
     $('home-now').classList.toggle('off', !title)
-    if (title) $('home-now').innerHTML = `<span style="color:${C[cls].color}">${icon(C[cls].icon, 40)}</span>${NAME[cls]} <small>${dir === 'ab' ? 'A → B' : 'B → A'}</small>`
+    if (title) $('home-now').innerHTML = `<span style="color:${C[cls].color}">${icon(C[cls].icon, 40)}</span>${NAME[kind]} <small>${dir === 'ab' ? 'A → B' : 'B → A'}</small>`
   }
   $('home-hint').classList.toggle('off', p > 0.02)
 }
@@ -281,6 +250,8 @@ export async function showHome() {
     document.querySelectorAll('#view-home .reveal').forEach((el) => revealIo.observe(el))
   }
   $('view-home').classList.toggle('still', reduced())
+  fitScene()
+  addEventListener('resize', fitScene)
   lastP = -1
   if (reduced()) {
     render(0.17) // un auto recién contado
@@ -293,6 +264,7 @@ export async function showHome() {
 }
 
 export function leaveHome() {
+  removeEventListener('resize', fitScene)
   removeEventListener('scroll', onScroll)
   removeEventListener('resize', onScroll)
 }

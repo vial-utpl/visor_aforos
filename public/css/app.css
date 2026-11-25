@@ -359,8 +359,9 @@ button.danger { color: #b42318; }
 .topnav a.on { box-shadow: inset 0 -2px 0 var(--text); padding-bottom: 2px; }
 .home-view { display: block; background: #f5f8fb; }
 .h-scroll { height: 560vh; position: relative; }
-.h-sticky { position: sticky; top: 58px; height: calc(100vh - 58px); overflow: hidden; display: flex; flex-direction: column; background: #eef4f9; }
-.h-head { position: relative; flex: none; min-height: 11.5rem; display: grid; place-items: center; padding: 1.2rem 1rem 0; text-align: center; }
+.h-sticky { position: sticky; top: 58px; height: calc(100vh - 58px); overflow: hidden; display: flex; flex-direction: column; background: #e6eff7; }
+/* el título va sobre el cielo de la escena */
+.h-head { position: absolute; z-index: 2; top: 0; left: 0; right: 0; min-height: 11.5rem; display: grid; place-items: center; padding: clamp(1rem, 4vh, 2.4rem) 1rem 0; text-align: center; pointer-events: none; }
 .h-intro, .h-now { grid-area: 1 / 1; transition: opacity 0.35s, transform 0.35s; }
 .h-intro h1 { font-size: clamp(1.9rem, 4.6vw, 3.4rem); line-height: 1.04; font-weight: 700; color: #12324d; margin: 0 0 0.6rem; letter-spacing: -0.02em; }
 .h-intro p { max-width: 640px; margin: 0 auto; color: #4b5563; font-size: clamp(0.95rem, 1.5vw, 1.08rem); line-height: 1.45; }
@@ -424,15 +425,9 @@ button.danger { color: #b42318; }
   .h-chip.bump, .h-hint::after { animation: none; }
 }
 @media (max-width: 700px) {
-  .h-head { min-height: 13rem; }
+  .h-head { min-height: 12rem; }
   .h-hud { gap: 0.35rem; padding: 0.6rem 0.5rem 0.8rem; }
   .h-chip { font-size: 0.8rem; padding: 0.25rem 0.6rem 0.25rem 0.45rem; }
   .h-chip span { display: none; }
   .h-section { padding: 3rem 1rem; }
 }
-/* silueta de Loja (portada) */
-.skyline .sk { fill: #e6edf3; stroke: #93a3b3; stroke-width: 2; stroke-linejoin: round; }
-.skyline .sk-alt { fill: #edf1f5; }
-.skyline .sk-w { fill: #cdd8e2; stroke: #93a3b3; stroke-width: 1.5; }
-.skyline .sk-l { fill: none; stroke: #93a3b3; stroke-width: 1.5; stroke-linecap: round; }
-.skyline .sk-roof { fill: #dcc7bd; stroke: #93a3b3; stroke-width: 2; stroke-linejoin: round; }
