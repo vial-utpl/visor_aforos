@@ -1,31 +1,41 @@
-// Escena de la portada: un taxi recorre Loja y pasa por estaciones de conteo. El taxi queda quieto en la pantalla y la
-// ciudad pasa por detrás en capas, cada una a su velocidad (parallax): nubes, cerros con el parque eólico Villonaco,
-// el skyline de Loja, la calle y la vereda de adelante. Cada estación (poste, cámara y línea de conteo) marca con un
-// recuadro lo que ve y suma al cruzar su línea: el taxi y los que vienen o van por la vía.
-// Todo es función del avance p (0..1) del scroll: subir y bajar es exactamente reversible. Las ruedas giran lo que
-// corresponde a lo recorrido; la carrocería vibra, las aspas giran y las nubes derivan solas (CSS).
+// Escena de la portada: un aforo. Una sola cámara, fija en un poste junto a la vía, mira un tramo de calle en Loja;
+// mientras se baja con el scroll pasan vehículos y peatones en los dos sentidos, la cámara marca con un recuadro a cada
+// uno que entra en su zona de estudio y lo suma al cruzar la línea de conteo (que va por el medio de esa zona).
+// El fondo no se mueve: cerros de Loja con el Villonaco y su parque eólico (las aspas giran), nubes que derivan y el
+// skyline de la ciudad. Lo que se mueve con el scroll es función del avance p (0..1): subir y bajar es exactamente
+// reversible. Las ruedas giran lo recorrido y la carrocería vibra.
 import { CLASSES } from './data.js'
 
 const SVGNS = 'http://www.w3.org/2000/svg'
 const IMG = 'img/portada/'
 
-// ───── Geometría (unidades de la escena) ─────
+// ───── Geometría (unidades de la escena, 1600 de ancho) ─────
+const W = 1600
 const GROUND = 470 // pie de los edificios
-const WALK = 492 // vereda lejana (detrás de la vía), donde están los postes
+const WALK = 492 // vereda lejana, donde está el poste
 const ROAD = [494, 650] // calzada
 const LANE = { walk: 491, ba: 556, ab: 612, edge: 646 }
-const CAR_X = 430 // dónde queda el taxi en la pantalla
-const D = 4600 // lo que recorre el taxi en todo el scroll
-// lo que siempre tiene que verse: el taxi, la estación que se acerca y cielo para el título
-// (en el celular manda el ancho: x0..x1 es lo mínimo; en pantallas anchas sobra a los costados)
-const VISTA = { x0: 320, x1: 900, y0: -40, y1: 760 }
-const SPEED = { clouds: 0.06, far: 0.18, city: 0.42, street: 1, front: 1.18 }
+// lo que siempre tiene que verse: el poste, la zona de estudio y cielo para el título (en el celular manda el ancho)
+const VISTA = { x0: 470, x1: 1210, y0: -40, y1: 760 }
 
-// estaciones: avance en que el taxi cruza cada línea de conteo; el poste va antes de la línea
-const STATIONS = [0.16, 0.39, 0.62, 0.85]
-const LINE_OFF = 170 // del poste a la línea
-const CONE = [-40, 360] // tramo de la calzada que ve la cámara, desde el poste
-const lineWorld = (i) => CAR_X + STATIONS[i] * D
+// La cámara: en lo alto del poste, mira hacia abajo y hacia la derecha. Su zona de estudio es el tramo de calzada
+// entre CONE[0] y CONE[1]; la línea de conteo va por el medio de esa zona, desde la cámara hacia el borde cercano de la
+// vía (por eso es inclinada: cruza la calle en profundidad, de la vereda lejana a la cercana).
+const POLE_X = 560
+const CAM = { x: 604, y: WALK - 160 }
+const CONE = [650, 1210]
+const LINE_FOOT = (CONE[0] + CONE[1]) / 2 // donde la línea toca el borde cercano de la vía
+const lineX = (y) => CAM.x + ((y - CAM.y) * (LINE_FOOT - CAM.x)) / (ROAD[1] - CAM.y)
+const coneX = (y, side) => CAM.x + ((y - CAM.y) * (CONE[side] - CAM.x)) / (ROAD[1] - CAM.y)
+
+// Fondo: cerros (img/portada/loja-montanas.webp, cielo transparente) con los aerogeneradores del Villonaco en su cresta
+// [x, y del pie, alto] (los saca herramientas/montanas.py del dibujo), y el skyline de Loja (herramientas/skyline.py).
+// (python herramientas/montanas.py imagenes/loja-montanas.png public/img/portada/loja-montanas.webp 450 58 170)
+// El Villonaco queda detrás de la cámara: así se ve también en el celular.
+const MOUNTAINS = { src: 'loja-montanas.webp', y: 58, h: 450, dx: 170 }
+const TURBINES = [[459.7, 276.2, 28], [489.5, 269.9, 28], [519.4, 261.2, 28], [549.2, 250.1, 28], [578.4, 247.0, 28], [608.3, 243.2, 28],
+  [638.1, 238.2, 28], [667.3, 243.8, 28], [697.1, 253.8, 28], [727.0, 263.1, 28], [756.8, 273.1, 28]]
+const SKYLINE = { main: ['loja-skyline-1.webp', 2172, 274], side: ['loja-skyline-2.webp', 2172, 253] }
 
 // ilustraciones de perfil mirando a la derecha (img/portada) y su escala en la escena
 const K = 1.45
@@ -49,115 +59,95 @@ const WHEELS = {
 // vibración de la carrocería: periodo (s) y amplitud; la persona y la bici se mecen con el paso o la pedalada
 const VIBRA = { car: [0.3, 1.2], taxi: [0.3, 1.2], bus: [0.44, 1.5], truck: [0.48, 1.7], motorcycle: [0.17, 1.1] }
 
-// Lo que pasa. v: velocidad respecto del taxi (1 = como el taxi; negativa = viene de frente). at: [estación, avance en
-// que cruza su línea]. own: el taxi.
+// Lo que pasa frente a la cámara, en orden. dir: ab = de izquierda a derecha. Cada uno entra a su turno y cruza la
+// escena en TRAVEL del avance; el peatón recorre solo un tramo de la vereda, más despacio.
 const EVENTS = [
-  { cls: 'car', sprite: 'taxi', dir: 'ab', v: 1, own: true },
-  { cls: 'motorcycle', dir: 'ba', v: -0.9, at: [0, 0.12] },
-  { cls: 'bus', dir: 'ba', v: -0.55, at: [1, 0.33] },
-  { cls: 'person', dir: 'ba', v: -0.025, at: [1, 0.485], lane: 'walk' },
-  { cls: 'bicycle', dir: 'ab', v: 0.35, at: [2, 0.5], lane: 'edge' }, // el taxi la pasa después de la estación
-  { cls: 'truck', dir: 'ba', v: -0.65, at: [2, 0.665] },
-  { cls: 'car', dir: 'ba', v: -1, at: [3, 0.8] },
-  { cls: 'motorcycle', dir: 'ab', v: 1.35, at: [3, 0.885], lane: 'edge' },
+  { cls: 'car', sprite: 'taxi', dir: 'ab' },
+  { cls: 'motorcycle', dir: 'ba' },
+  { cls: 'bus', dir: 'ab' },
+  { cls: 'person', dir: 'ba', lane: 'walk', from: 1420, to: 300 },
+  { cls: 'truck', dir: 'ba' },
+  { cls: 'bicycle', dir: 'ab', lane: 'edge' },
+  { cls: 'car', dir: 'ba' },
+  { cls: 'motorcycle', dir: 'ab' },
 ]
-
-// Skyline de Loja (herramientas/skyline.py: un tono, cielo transparente), una tira tras otra a lo largo del recorrido.
-// Las dos miden 2172 px de ancho; s: unidades de la escena por px (las dos a la misma escala).
-const CITY = { s: 0.84, gap: 40, strips: [['loja-skyline-1.webp', 2172, 274], ['loja-skyline-2.webp', 2172, 253]] }
+const START = 0.04
+const STEP = 0.107
+const TRAVEL = 0.2
+const ENTER = -320 // de dónde salen y adónde llegan (fuera de la vista)
+const EXIT = W + 320
 
 export const NAME = { car: 'Auto', taxi: 'Taxi', motorcycle: 'Moto', bus: 'Bus', truck: 'Camión', bicycle: 'Bicicleta', person: 'Peatón' }
 
 // ───── Dibujo ─────
 
-const band = (y, h, fill) => `<rect x="-4000" y="${y}" width="12000" height="${h}" fill="${fill}"/>`
+const band = (y, h, fill) => `<rect x="-3000" y="${y}" width="${W + 6000}" height="${h}" fill="${fill}"/>`
 
-/** Cerros lejanos con el cordón del Villonaco y sus aerogeneradores (vectores: las aspas giran), y edificios lejanos
- *  muy claros, como en un contraluz. */
-function farSvg() {
-  const path = (f, x0, x1, base) => {
-    let d = `M${x0},${base}`
-    for (let x = x0; x <= x1; x += 20) d += `L${x},${f(x).toFixed(1)}`
-    return `${d}L${x1},${base}Z`
-  }
-  const back = (x) => GROUND - 150 - 26 * Math.sin(x / 300 + 1.2) - 12 * Math.sin(x / 97)
-  // el Villonaco: un lomo largo que se repite cada 2400 (las capas lejanas se mueven poco)
-  const vill = (x) => {
-    const m = ((x % 2400) + 2400) % 2400
-    return GROUND - 118 - 58 * Math.exp(-(((m - 700) / 460) ** 2)) - 6 * Math.sin(x / 53)
-  }
-  const turbine = (x, i) => {
-    const y = vill(x) + 2
-    const h = 44 - Math.abs((((x % 2400) + 2400) % 2400) - 700) / 28
-    const blade = `M0,0 C${h * 0.06},${-h * 0.12} ${h * 0.05},${-h * 0.4} 0,${-h * 0.58} C${-h * 0.03},${-h * 0.4} ${-h * 0.03},${-h * 0.12} 0,0Z`
-    return `<g transform="translate(${x},${y.toFixed(1)})">
-      <path d="M${-h * 0.035},0 L${h * 0.035},0 L${h * 0.016},${-h} L${-h * 0.016},${-h}Z" class="h-tw"/>
-      <g transform="translate(0,${-h})"><g class="h-blades" style="--t:${(5.2 + (i % 3) * 0.9).toFixed(1)}s;--d:${(-i * 1.37).toFixed(2)}s">
-        ${[0, 120, 240].map((a) => `<path d="${blade}" transform="rotate(${a + i * 17})" class="h-tw"/>`).join('')}
-      </g><circle r="${(h * 0.045).toFixed(1)}" class="h-tw"/></g></g>`
-  }
-  const turbines = []
-  for (let k = -1; k < 3; k++) for (let j = 0; j < 11; j++) turbines.push(k * 2400 + 430 + j * 54)
-  // edificios lejanos: cajas y árboles redondos, como en el modelo, repetidos cada 480
-  let blocks = ''
-  for (let x0 = -2400; x0 < 4800; x0 += 480) {
-    blocks += `<g transform="translate(${x0},${GROUND - 158})"><path d="M0 158V62H44V158ZM52 158V88H82V158ZM94 158V106h4V158ZM82 106a14 14 0 1 1 28 0a14 14 0 1 1-28 0ZM120 158V48H182V158ZM190 158V74H226V158ZM238 158V98h4V158ZM224 98a16 16 0 1 1 32 0a16 16 0 1 1-32 0ZM264 158V58H314V158ZM322 158V92H350V158ZM358 158V36H416V158ZM428 158V110h4V158ZM417 110a13 13 0 1 1 26 0a13 13 0 1 1-26 0ZM452 158V82H478V158Z"/></g>`
-  }
-  return `
-    <path d="${path(back, -2400, 4800, GROUND)}" fill="#e8edf4"/>
-    <path d="${path(vill, -2400, 4800, GROUND)}" fill="#e2e8f0"/>
-    <g class="h-far-tw">${turbines.map(turbine).join('')}</g>
-    <g fill="#e9eef5" transform="translate(0,${GROUND}) scale(1,0.62) translate(0,${-GROUND})">${blocks}</g>`
-}
-
-/** Nubes planas, repetidas cada 480. */
+/** Nubes planas, repetidas cada 480; derivan solas (CSS) y vuelven a empezar sin salto. */
 function cloudsSvg() {
   const cloud = 'M30 0a10 10 0 1 1 20 0a10 10 0 1 1-20 0ZM38-7a14 14 0 1 1 28 0a14 14 0 1 1-28 0ZM57-2a11 11 0 1 1 22 0a11 11 0 1 1-22 0ZM32 0h46v8h-46ZM216-30a14 14 0 1 1 28 0a14 14 0 1 1-28 0ZM227-40a20 20 0 1 1 39 0a20 20 0 1 1-39 0ZM254-33a15 15 0 1 1 31 0a15 15 0 1 1-31 0ZM219-30h64v11h-64ZM392 10a8 8 0 1 1 16 0a8 8 0 1 1-16 0ZM398 4a11 11 0 1 1 23 0a11 11 0 1 1-23 0ZM414 8a9 9 0 1 1 17 0a9 9 0 1 1-17 0ZM394 10h37v6h-37Z'
   let s = ''
-  for (let x = -2400; x < 4800; x += 480) s += `<path d="${cloud}" transform="translate(${x},0)"/>`
-  return `<g class="h-clouds" fill="#ffffff">${s}</g>`
+  for (let x = -2400; x < W + 2880; x += 480) s += `<path d="${cloud}" transform="translate(${x},0)"/>`
+  return `<g transform="translate(0,150)"><g class="h-clouds" fill="#ffffff">${s}</g></g>`
 }
 
-/** Skyline de Loja: las tiras una tras otra (y vuelta a empezar) a lo largo de lo que recorre la capa. */
-function citySvg() {
-  let out = ''
-  let i = 0
-  for (let x = -1700; x < 1600 + D * SPEED.city + 1600; i++) {
-    const [src, pw, ph] = CITY.strips[i % CITY.strips.length]
-    const w = pw * CITY.s
-    const h = ph * CITY.s
-    out += `<image href="${IMG}${src}" x="${x.toFixed(1)}" y="${(GROUND + 1 - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/>`
-    x += w + CITY.gap
-  }
-  return out
+/** Aerogenerador del Villonaco: torre y góndola quietas, aspas que giran (cada uno a su ritmo). */
+function turbineSvg([x, y, h], i) {
+  const blade = `M0,0 C${h * 0.06},${-h * 0.12} ${h * 0.05},${-h * 0.4} 0,${-h * 0.58} C${-h * 0.03},${-h * 0.4} ${-h * 0.03},${-h * 0.12} 0,0Z`
+  return `<g transform="translate(${x},${y})">
+    <path d="M${-h * 0.035},0 L${h * 0.035},0 L${h * 0.016},${-h} L${-h * 0.016},${-h}Z" class="h-tw"/>
+    <g transform="translate(0,${-h})"><g class="h-blades" style="--t:${(5.2 + (i % 3) * 0.9).toFixed(1)}s;--d:${(-i * 1.37).toFixed(2)}s">
+      ${[0, 120, 240].map((a) => `<path d="${blade}" transform="rotate(${a + i * 17})" class="h-tw"/>`).join('')}
+    </g><circle r="${(h * 0.05).toFixed(1)}" class="h-tw"/></g></g>`
 }
 
-/** Calle: líneas del centro y las estaciones de conteo (poste con cámara, cono de visión y línea de conteo). */
+/** Cerros, aerogeneradores y skyline: la tira principal (con la Puerta de la Ciudad) ocupa el ancho de la escena y la
+ *  otra sigue a los costados para las pantallas más anchas. */
+function backdropSvg() {
+  const m = MOUNTAINS
+  const mw = m.h * 3
+  // a los costados, el mismo dibujo en espejo: así la línea de los cerros sigue sin cortes en pantallas anchas
+  const mx = (W - mw) / 2 + m.dx
+  const img = (t) => `<image href="${IMG}${m.src}" x="0" y="${m.y}" width="${mw}" height="${m.h}" transform="${t}"/>`
+  // más claros que el skyline, para que los edificios se lean contra los cerros
+  const mountains = `<g opacity="0.6">${img(`translate(${mx},0) scale(-1,1)`)}${img(`translate(${mx},0)`)}${img(`translate(${mx + 2 * mw},0) scale(-1,1)`)}</g>`
+  const [src, pw, ph] = SKYLINE.main
+  const s = W / pw
+  const [src2, pw2, ph2] = SKYLINE.side
+  const side = (x) => `<image href="${IMG}${src2}" x="${x}" y="${GROUND + 1 - ph2 * s}" width="${pw2 * s}" height="${ph2 * s}"/>`
+  return `${mountains}${TURBINES.map(turbineSvg).join('')}
+    ${side(-pw2 * s - 30)}<image href="${IMG}${src}" x="0" y="${GROUND + 1 - ph * s}" width="${W}" height="${ph * s}"/>${side(W + 30)}`
+}
+
+/** Calle, poste con la cámara, zona de estudio y línea de conteo. */
 function streetSvg() {
   let dashes = ''
-  for (let x = -1600; x < D + 3200; x += 80) dashes += `M${x} ${LANE.ab - 36}h40`
-  const stations = STATIONS.map((_, i) => {
-    const x = lineWorld(i) - LINE_OFF
-    return `<g class="h-station" id="h-st-${i}" transform="translate(${x},0)">
-      <polygon class="h-cone" points="44,${WALK - 160} ${CONE[1]},${ROAD[1]} ${CONE[0]},${ROAD[1]}"/>
-      <line x1="${LINE_OFF}" x2="${LINE_OFF}" y1="${ROAD[0] + 4}" y2="${ROAD[1]}" class="h-line"/>
-      <image href="${IMG}pole.webp" x="-20" y="${WALK + 4 - 175}" width="57" height="175"/>
+  for (let x = -3000; x < W + 3000; x += 80) dashes += `M${x} ${LANE.ab - 36}h40`
+  const y0 = ROAD[0] + 2
+  const y1 = ROAD[1]
+  return `
+    ${band(GROUND - 1, WALK - GROUND + 3, '#d9e0e8')}
+    <path d="M-3000 ${GROUND}H${W + 3000}" stroke="#b9c3cf" stroke-width="1.5"/>
+    ${band(ROAD[0], ROAD[1] - ROAD[0], '#e5e9ee')}
+    <path d="${dashes}" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+    <g class="h-station" id="h-station">
+      <polygon class="h-cone" points="${CAM.x},${CAM.y} ${CONE[1]},${y1} ${CONE[0]},${y1}"/>
+      <polygon class="h-zone" points="${coneX(y0, 0)},${y0} ${coneX(y0, 1)},${y0} ${CONE[1]},${y1} ${CONE[0]},${y1}"/>
+      <line class="h-line" x1="${lineX(y0 - 14)}" y1="${y0 - 14}" x2="${LINE_FOOT}" y2="${y1}"/>
+      <image href="${IMG}pole.webp" x="${POLE_X - 22}" y="${WALK + 4 - 175}" width="57" height="175"/>
     </g>`
-  }).join('')
-  return `<path d="${dashes}" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>${stations}`
 }
 
-/** Vereda de adelante: baldosas y algún árbol, más rápida que la calle. */
+/** Vereda de adelante con baldosas y rejillas. */
 function frontSvg() {
   let tiles = ''
-  for (let x = -2400; x < D * SPEED.front + 3200; x += 44) tiles += `M${x} ${ROAD[1] + 14}V1400`
-  for (let y = ROAD[1] + 14; y < 1400; y += 44) tiles += `M-2400 ${y}H${D * SPEED.front + 3200}`
+  for (let x = -3000; x < W + 3000; x += 44) tiles += `M${x} ${ROAD[1] + 14}V1400`
+  for (let y = ROAD[1] + 14; y < 1400; y += 44) tiles += `M-3000 ${y}H${W + 3000}`
   let grates = ''
-  for (let x = -2400; x < D * SPEED.front + 3200; x += 968) {
-    grates += `<rect x="${x + 110}" y="${ROAD[1] + 22}" width="48" height="16" rx="3" fill="#e3e8f0" stroke="#c9d2de"/>`
-  }
-  return `${band(ROAD[1], 1000, '#eef1f6')}<rect x="-4000" y="${ROAD[1]}" width="12000" height="14" fill="#d9e0e8"/>
-    <path d="${tiles}" stroke="#dde3ec" stroke-width="1" fill="none"/>${grates}`
+  for (let x = -2420; x < W + 3000; x += 968) // (ninguna debajo del rótulo de la línea) grates += `<rect x="${x}" y="${ROAD[1] + 22}" width="48" height="16" rx="3" fill="#e3e8f0" stroke="#c9d2de"/>`
+  return `${band(ROAD[1], 1000, '#eef1f6')}${band(ROAD[1], 14, '#d9e0e8')}
+    <path d="${tiles}" stroke="#dde3ec" stroke-width="1" fill="none"/>${grates}
+    <text x="${LINE_FOOT}" y="${ROAD[1] + 40}" text-anchor="middle" class="h-svg-note">línea de conteo</text>`
 }
 
 /** Un vehículo o peatón: sombra y encima la carrocería con sus ruedas (en px de la ilustración, escalada). */
@@ -202,36 +192,28 @@ function masksSvg() {
 // ───── Escena ─────
 
 let svg
-let layers = {}
 let actors = []
-let stations = []
+let station
 
 export function buildScene(el) {
   svg = el
-  const g = (id, html) => `<g id="h-${id}">${html}</g>`
   svg.innerHTML = `<defs>
-      <linearGradient id="h-cone-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#16a37f" stop-opacity=".04"/><stop offset="1" stop-color="#16a37f" stop-opacity=".24"/></linearGradient>
+      <linearGradient id="h-cone-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#16a37f" stop-opacity=".03"/><stop offset="1" stop-color="#16a37f" stop-opacity=".16"/></linearGradient>
       ${masksSvg()}</defs>
     ${band(-2000, 2600, '#eef3f8')}
-    <g transform="translate(0,150)">${g('clouds', cloudsSvg())}</g>
-    ${g('far', farSvg())}
-    ${g('city', citySvg())}
-    ${band(GROUND - 1, WALK - GROUND + 3, '#d9e0e8')}
-    <path d="M-4000 ${GROUND}H8000" stroke="#b9c3cf" stroke-width="1.5"/>
-    ${band(ROAD[0], ROAD[1] - ROAD[0], '#e5e9ee')}
-    ${g('street', streetSvg())}
+    ${cloudsSvg()}
+    ${backdropSvg()}
+    ${streetSvg()}
     <g id="h-actors"></g>
-    ${g('front', frontSvg())}
+    ${frontSvg()}
     <g id="h-boxes"></g>`
-  layers = Object.fromEntries(['clouds', 'far', 'city', 'street', 'front'].map((k) => [k, svg.querySelector(`#h-${k}`)]))
-  stations = STATIONS.map((_, i) => svg.querySelector(`#h-st-${i}`))
+  station = svg.querySelector('#h-station')
   const actorsG = svg.querySelector('#h-actors')
   const boxesG = svg.querySelector('#h-boxes')
-  actors = EVENTS.map((e) => {
+  actors = EVENTS.map((e, i) => {
     const key = e.sprite ?? e.cls
     const sp = SPRITES[key]
-    const lane = e.lane ?? e.dir
-    const x0 = e.own ? CAR_X : lineWorld(e.at[0]) - e.v * e.at[1] * D
+    const y = LANE[e.lane ?? e.dir]
     const el = document.createElementNS(SVGNS, 'g')
     const { html, radius } = actorSvg(key)
     el.innerHTML = html
@@ -245,67 +227,64 @@ export function buildScene(el) {
       <text x="9" y="17">${label}</text></g>
       <text class="h-plus" x="${bw / 2 - 4}" y="${-bh - 4}" text-anchor="end">+1</text>`
     boxesG.append(box)
-    return { ...e, key, el, box, x0, y: LANE[lane], radius, spin: [...el.querySelectorAll('.spin')], bob: el.querySelector('.h-bob') }
+    const from = e.from ?? (e.dir === 'ab' ? ENTER : EXIT)
+    const to = e.to ?? (e.dir === 'ab' ? EXIT : ENTER)
+    return {
+      ...e, key, el, box, y, from, to, start: START + i * STEP, radius,
+      line: lineX(y), zone: [coneX(y, 0), coneX(y, 1)],
+      spin: [...el.querySelectorAll('.spin')], bob: el.querySelector('.h-bob'),
+    }
   })
   // de atrás hacia adelante: la vereda lejana, el carril B→A, el A→B
   actors.slice().sort((a, b) => a.y - b.y).forEach((a) => actorsG.append(a.el))
 }
 
-/** El viewBox sigue la forma de la pantalla y siempre deja ver el taxi, la estación que viene y cielo para el título. */
+/** El viewBox sigue la forma de la pantalla y siempre deja ver la cámara, su zona de estudio y cielo para el título. */
 export function fitScene() {
   const r = svg.getBoundingClientRect()
   if (!r.width || !r.height) return
   const ar = r.width / r.height
   const vw = Math.max(VISTA.x1 - VISTA.x0, (VISTA.y1 - VISTA.y0) * ar)
   const vh = vw / ar
-  const x = (VISTA.x0 + VISTA.x1) / 2 - vw / 2
+  const x = Math.min(Math.max((VISTA.x0 + VISTA.x1) / 2 - vw / 2, -vw / 2 + W / 2 - 1400), W / 2 - vw / 2 + 1400)
   svg.setAttribute('viewBox', `${x.toFixed(1)} ${(VISTA.y1 - vh).toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}`)
   svg.setAttribute('preserveAspectRatio', 'xMidYMax meet')
 }
 
-/** Estado de la escena para un avance p: capas, vehículos, recuadros y conteo. Devuelve lo contado por clase y lo que
- *  la cámara mira (para el título). */
+/** Estado de la escena para un avance p: posición de cada uno, recuadros y conteo. Devuelve lo contado por clase y lo
+ *  que la cámara mira (para el título). */
 export function renderScene(p) {
-  const cam = p * D
-  for (const [k, el] of Object.entries(layers)) el.setAttribute('transform', `translate(${(-cam * SPEED[k]).toFixed(1)},0)`)
   const counts = Object.fromEntries(CLASSES.map((c) => [c.key, 0]))
-  const lines = STATIONS.map((_, i) => lineWorld(i))
   let focus = null
-  const watching = new Set()
   for (const a of actors) {
-    const wx = a.x0 + a.v * cam // posición en la calle
-    const sx = wx - cam // en la pantalla
-    const onStage = sx > -700 && sx < 2900
+    const f = (p - a.start) / TRAVEL
+    const t = Math.min(1, Math.max(0, f))
+    const x = a.from + (a.to - a.from) * t
+    const onStage = f > 0 && f < 1
     a.el.style.display = onStage ? '' : 'none'
-    a.el.setAttribute('transform', `translate(${sx.toFixed(1)},${a.y}) scale(${a.dir === 'ab' ? 1 : -1},1)`)
-    const dist = Math.abs(a.v * cam)
+    a.el.setAttribute('transform', `translate(${x.toFixed(1)},${a.y}) scale(${a.dir === 'ab' ? 1 : -1},1)`)
+    const dist = Math.abs(x - a.from)
     if (onStage && a.radius) {
       const deg = ((dist / a.radius) * (180 / Math.PI)) % 360
       for (const s of a.spin) s.setAttribute('transform', `rotate(${deg.toFixed(1)})`)
     }
     if (onStage && a.bob) {
-      const [stride, amp] = a.cls === 'person' ? [9, 2.4] : [60, 1.2]
-      a.bob.setAttribute('transform', `translate(0,${(-amp * Math.abs(Math.sin(((a.cls === 'person' ? p * D * 0.05 : dist) / stride) * Math.PI))).toFixed(2)})`)
+      const [stride, amp] = a.cls === 'person' ? [24, 2.4] : [60, 1.2]
+      a.bob.setAttribute('transform', `translate(0,${(-amp * Math.abs(Math.sin((dist / stride) * Math.PI))).toFixed(2)})`)
     }
-    // cada uno se cuenta en su estación (el taxi, en todas las que pasa): al cruzar su línea
-    const mine = a.own ? lines.map((_, i) => i) : [a.at[0]]
-    counts[a.cls] += mine.filter((i) => (a.dir === 'ab' ? wx >= lines[i] : wx <= lines[i])).length
-    // ¿lo ve la cámara de su estación?
-    let seen = -1
-    for (const i of mine) {
-      const pole = lines[i] - LINE_OFF
-      if (wx > pole + CONE[0] && wx < pole + CONE[1]) seen = i
-    }
-    a.box.style.display = seen >= 0 && onStage ? '' : 'none'
-    if (seen >= 0) {
-      watching.add(seen)
-      const crossed = a.dir === 'ab' ? wx >= lines[seen] : wx <= lines[seen]
-      a.box.setAttribute('transform', `translate(${sx.toFixed(1)},${a.y})`)
+    // el peatón aparece y se va despacio en los extremos de su tramo
+    if (a.cls === 'person') a.el.style.opacity = Math.min(1, f * 8, (1 - f) * 8).toFixed(2)
+    const crossed = f > 0 && (a.dir === 'ab' ? x >= a.line : x <= a.line)
+    if (crossed) counts[a.cls]++
+    const seen = onStage && x > a.zone[0] && x < a.zone[1]
+    a.box.style.display = seen ? '' : 'none'
+    if (seen) {
+      a.box.setAttribute('transform', `translate(${x.toFixed(1)},${a.y})`)
       a.box.classList.toggle('done', crossed)
-      const dl = Math.abs(wx - lines[seen])
+      const dl = Math.abs(x - a.line)
       if (!focus || dl < focus.dl) focus = { key: a.key, cls: a.cls, dir: a.dir, dl }
     }
   }
-  stations.forEach((st, i) => st.classList.toggle('on', watching.has(i)))
+  station.classList.toggle('on', !!focus)
   return { counts, focus }
 }
