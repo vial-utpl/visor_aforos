@@ -1,142 +1,34 @@
-// Portada: una cámara en un poste cuenta lo que pasa por la calle mientras se baja con el scroll (cada vehículo recibe
-// su recuadro, cruza la línea de conteo y suma en su clase), y después los totales reales de la base.
-// La escena no usa librerías: la posición de cada vehículo sale del avance del scroll en una sección "sticky", así que
-// subir y bajar es exactamente reversible. Con "reducir movimiento" la escena queda quieta.
+// Portada: un taxi recorre Loja mientras se baja con el scroll y las estaciones de conteo que pasa cuentan lo que ven
+// (js/escena.js), y después los totales reales de la base. Con "reducir movimiento" la escena queda quieta.
 import { CLASSES, db, siteOverview, liveState, fmt, esc } from './data.js'
 import { icon } from './icons.js'
+import { buildScene, fitScene, renderScene, NAME } from './escena.js'
 
 const $ = (id) => document.getElementById(id)
-const SVGNS = 'http://www.w3.org/2000/svg'
 const C = Object.fromEntries(CLASSES.map((c) => [c.key, c]))
-
-// Escena (viewBox 1600 × 720): cielo arriba (ahí va el título), la silueta de Loja con su suelo en y = 524, la acera
-// lejana, la vía con el carril B→A arriba y el A→B abajo, y la acera cercana. Línea de conteo en x = 900.
-const W = 1600
-const H = 720
-const GROUND = 524
-const LINE_X = 900
-const CONE = [640, 1190] // tramo de la vía que ve la cámara
-const LANE = { walk: GROUND + 14, ba: GROUND + 74, ab: GROUND + 144 }
-const NAME = { car: 'Auto', taxi: 'Taxi', motorcycle: 'Moto', bus: 'Bus', truck: 'Camión', bicycle: 'Bicicleta', person: 'Peatón' }
 const PLURAL = { car: 'Autos', motorcycle: 'Motos', bus: 'Buses', truck: 'Camiones', bicycle: 'Bicicletas', person: 'Peatones' }
-const IMG = 'img/portada/'
-
-// Ilustraciones de perfil mirando a la derecha (img/portada, generadas para el visor): ancho y alto en la escena.
-const SPRITES = {
-  car: { w: 120, h: 47 },
-  taxi: { w: 120, h: 50 },
-  bus: { w: 272, h: 101 },
-  truck: { w: 240, h: 97 },
-  motorcycle: { w: 62, h: 52 },
-  bicycle: { w: 56, h: 58 },
-  person: { w: 31, h: 52 },
-}
-
-// Lo que pasa frente a la cámara, en orden. dir: ab = de izquierda a derecha; sprite: el dibujo si no es el de la clase.
-const EVENTS = [
-  { cls: 'car', dir: 'ab' },
-  { cls: 'motorcycle', dir: 'ba' },
-  { cls: 'bus', dir: 'ab' },
-  { cls: 'person', dir: 'ba', lane: 'walk' },
-  { cls: 'truck', dir: 'ba' },
-  { cls: 'bicycle', dir: 'ab' },
-  { cls: 'car', sprite: 'taxi', dir: 'ba' },
-  { cls: 'motorcycle', dir: 'ab' },
-]
-const START = 0.05
-const STEP = 0.105
-const TRAVEL = 0.2 // fracción del scroll que tarda cada uno en cruzar la escena
-const FROM = -260
-const TO = 1860
-
-/** Fondo: cielo, la silueta de Loja (dos panorámicas unidas, con el parque eólico Villonaco en los cerros), aceras, vía,
- *  poste con la cámara, cono de visión y línea de conteo. */
-function sceneSvg() {
-  const far = 3200 // las bandas de la vía siguen más allá del viewBox
-  const dashes = Array.from({ length: 90 }, (_, i) => `<rect x="${i * 72 - far}" y="${GROUND + 86}" width="40" height="5" rx="2"/>`).join('')
-  const panH = (W / 3000) * 500 // panorama 3000 × 500, suelo a 446 px
-  const panY = GROUND - (W / 3000) * 446
-  const band = (y, h, fill) => `<rect x="${-far}" y="${y}" width="${W + 2 * far}" height="${h}" fill="${fill}"/>`
-  return `
-    <defs>
-      <linearGradient id="h-cone" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#16a37f" stop-opacity=".05"/><stop offset="1" stop-color="#16a37f" stop-opacity=".22"/></linearGradient>
-    </defs>
-    ${band(-600, H + 1200, '#e6eff7')}
-    <image href="${IMG}loja-panorama.webp" x="0" y="${panY}" width="${W}" height="${panH}" preserveAspectRatio="none"/>
-    ${band(GROUND - 1, 17, '#cfd8e0')}
-    ${band(GROUND + 16, 140, '#e1e6eb')}
-    <g fill="#ffffff">${dashes}</g>
-    ${band(GROUND + 156, 600, '#cfd8e0')}
-    <polygon points="589,${GROUND - 156} ${CONE[1]},${GROUND + 160} ${CONE[0]},${GROUND + 160}" fill="url(#h-cone)"/>
-    <line x1="${LINE_X}" x2="${LINE_X}" y1="${GROUND + 12}" y2="${GROUND + 160}" stroke="#16a37f" stroke-width="3" stroke-dasharray="10 8"/>
-    <text x="${LINE_X}" y="${GROUND + 182}" text-anchor="middle" class="h-svg-note">línea de conteo</text>
-    <image href="${IMG}pole.webp" x="538" y="${GROUND + 10 - 170}" width="55" height="170"/>
-    <g class="h-end"><circle cx="46" cy="${GROUND + 86}" r="20"/><text x="46" y="${GROUND + 93}" text-anchor="middle">A</text></g>
-    <g class="h-end"><circle cx="1554" cy="${GROUND + 86}" r="20"/><text x="1554" y="${GROUND + 93}" text-anchor="middle">B</text></g>`
-}
-
-/** La escena llena el espacio y se recorta a los lados (o arriba, en el cielo) según la forma de la pantalla. */
-function fitScene() {
-  $('home-svg').setAttribute('preserveAspectRatio', 'xMidYMax slice')
-}
-
 
 // ---------------------------------------------------------------------------------------------------------------
 // Escena con scroll
 
-let actors = []
 let counts = {}
 let shownTitle = null
 let raf = 0
 let lastP = -1
 
-function buildScene() {
-  const svg = $('home-svg')
-  svg.innerHTML = sceneSvg()
-  actors = EVENTS.map((e, i) => {
-    const sp = SPRITES[e.sprite ?? e.cls]
-    const g = document.createElementNS(SVGNS, 'g')
-    g.innerHTML = `<image href="${IMG}${e.sprite ?? e.cls}.webp" x="${-sp.w / 2}" y="${-sp.h}" width="${sp.w}" height="${sp.h}"/>`
-    const box = document.createElementNS(SVGNS, 'g')
-    box.setAttribute('class', 'h-box')
-    const bw = sp.w + 16
-    const bh = sp.h + 14
-    const label = `${NAME[e.sprite ?? e.cls].toUpperCase()} ${e.dir === 'ab' ? 'A→B' : 'B→A'}`
-    box.innerHTML = `<rect class="frame" x="${-bw / 2}" y="${-bh + 4}" width="${bw}" height="${bh}" rx="6"/>
-      <g class="h-tag" transform="translate(${-bw / 2},${-bh - 22})"><rect width="${label.length * 9.4 + 18}" height="24" rx="6"/>
-      <text x="9" y="17">${label}</text></g>
-      <text class="h-plus" x="${bw / 2 - 4}" y="${-bh - 4}" text-anchor="end">+1</text>`
-    svg.append(g, box)
-    return { ...e, g, box, y: LANE[e.lane ?? e.dir], start: START + i * STEP }
-  })
+function build() {
+  buildScene($('home-svg'))
   $('home-hud').innerHTML = CLASSES.slice()
     .reverse()
     .map((c) => `<div class="h-chip" id="h-chip-${c.key}" style="--c:${c.color}">${icon(c.icon, 22)}<span>${PLURAL[c.key]}</span><b>0</b></div>`)
     .join('')
 }
 
-/** Posición de cada vehículo y estado de los contadores para un avance p (0..1) de la sección. */
 function render(p) {
   if (p === lastP) return
   const forward = p > lastP
   lastP = p
-  const next = Object.fromEntries(CLASSES.map((c) => [c.key, 0]))
-  let focus = null
-  for (const a of actors) {
-    const f = (p - a.start) / TRAVEL
-    const t = Math.min(1, Math.max(0, f))
-    const x = a.dir === 'ab' ? FROM + (TO - FROM) * t : TO - (TO - FROM) * t
-    const onStage = f > 0 && f < 1
-    a.g.style.display = onStage ? '' : 'none'
-    a.g.setAttribute('transform', `translate(${x},${a.y}) scale(${a.dir === 'ab' ? 1 : -1},1)`)
-    const crossed = a.dir === 'ab' ? x >= LINE_X : x <= LINE_X
-    if (f > 0 && crossed) next[a.cls]++
-    const seen = onStage && x > CONE[0] && x < CONE[1]
-    a.box.style.display = seen ? '' : 'none'
-    a.box.setAttribute('transform', `translate(${x},${a.y})`)
-    a.box.classList.toggle('done', crossed)
-    if (seen && (!focus || Math.abs(x - LINE_X) < Math.abs(focus.x - LINE_X))) focus = { ...a, x }
-  }
+  const { counts: next, focus } = renderScene(p)
   for (const c of CLASSES) {
     if (next[c.key] === counts[c.key]) continue
     const chip = $(`h-chip-${c.key}`)
@@ -149,7 +41,7 @@ function render(p) {
   }
   counts = next
   // título: lo que la cámara está viendo, o el mensaje inicial
-  const title = p < START + 0.03 ? null : focus ? `${focus.sprite ?? focus.cls}|${focus.dir}` : shownTitle
+  const title = p < 0.04 ? null : focus ? `${focus.key}|${focus.dir}` : shownTitle
   if (title !== shownTitle) {
     shownTitle = title
     const [kind, dir] = title ? title.split('|') : []
@@ -239,22 +131,23 @@ async function loadTotals() {
 
 let built = false
 let revealIo
+let sizeObs
 
 export async function showHome() {
   if (!built) {
     built = true
-    buildScene()
+    build()
     revealIo = new IntersectionObserver((entries) => {
       for (const e of entries) if (e.isIntersecting) e.target.classList.add('in')
     }, { threshold: 0.2 })
     document.querySelectorAll('#view-home .reveal').forEach((el) => revealIo.observe(el))
+    sizeObs = new ResizeObserver(() => fitScene())
   }
   $('view-home').classList.toggle('still', reduced())
-  fitScene()
-  addEventListener('resize', fitScene)
+  sizeObs.observe($('home-svg'))
   lastP = -1
   if (reduced()) {
-    render(0.17) // un auto recién contado
+    render(0.17) // el taxi recién contado en la primera estación
   } else {
     addEventListener('scroll', onScroll, { passive: true })
     addEventListener('resize', onScroll)
@@ -264,7 +157,7 @@ export async function showHome() {
 }
 
 export function leaveHome() {
-  removeEventListener('resize', fitScene)
+  sizeObs?.disconnect()
   removeEventListener('scroll', onScroll)
   removeEventListener('resize', onScroll)
 }

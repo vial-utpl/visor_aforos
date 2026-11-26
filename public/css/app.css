@@ -372,6 +372,21 @@ button.danger { color: #b42318; }
 .h-svg-note { font: 600 15px var(--font); fill: #16a37f; letter-spacing: 0.04em; }
 .h-end circle { fill: #fff; stroke: #1b2230; stroke-width: 3; }
 .h-end text { font: 700 20px var(--font); fill: #1b2230; }
+/* la carrocería vibra un poco (el motor); las ruedas giran desde home.js según lo recorrido */
+.h-veh { animation: h-vibra var(--vib, 0.34s) ease-in-out infinite alternate; }
+@keyframes h-vibra { to { transform: translateY(var(--amp, -1.2px)); } }
+.h-shadow { fill: #1c2a38; opacity: 0.13; }
+/* Villonaco: las aspas giran solas, cada aerogenerador a su ritmo; las nubes derivan despacio */
+/* estaciones de conteo: el cono late suave y se enciende cuando la cámara ve a alguien */
+.h-cone { fill: url(#h-cone-fill); opacity: 0.45; transition: opacity 0.3s; }
+.h-station.on .h-cone { opacity: 1; animation: h-cono 1.2s ease-in-out infinite alternate; }
+@keyframes h-cono { from { opacity: 0.75; } to { opacity: 1; } }
+.h-line { stroke: #16a37f; stroke-width: 3; stroke-dasharray: 10 8; }
+.h-tw { fill: #f4f7fa; stroke: #b3bdc9; stroke-width: 1.1; stroke-linejoin: round; }
+.h-blades { animation: h-gira var(--t, 6s) linear infinite; animation-delay: var(--d, 0s); }
+@keyframes h-gira { to { transform: rotate(360deg); } }
+.h-clouds { animation: h-deriva 140s linear infinite alternate; }
+@keyframes h-deriva { to { transform: translateX(-260px); } }
 .h-box .frame { fill: none; stroke: #16a37f; stroke-width: 3; stroke-dasharray: 12 7; }
 .h-box.done .frame { stroke-dasharray: none; fill: rgba(22, 163, 127, 0.07); }
 .h-tag rect { fill: #16a37f; }
@@ -422,7 +437,7 @@ button.danger { color: #b42318; }
 .home-view.still .h-hint { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity: 1; transform: none; transition: none; }
-  .h-chip.bump, .h-hint::after { animation: none; }
+  .h-chip.bump, .h-hint::after, .h-veh, .h-blades, .h-clouds, .h-station.on .h-cone { animation: none; }
 }
 @media (max-width: 700px) {
   .h-head { min-height: 12rem; }
